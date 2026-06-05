@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>串口测试工具 · 代码导读与 C++/Qt 实战指南（面向 C/单片机工程师）</title>
+<style>
+  :root{
+    --fg:#1b1f23; --muted:#6a737d; --bg:#ffffff; --side:#f6f8fa;
+    --accent:#2b6cb0; --accent2:#1a7f37; --warn:#b54708; --code-bg:#0d1117; --code-fg:#e6edf3;
+    --border:#d8dee4; --tip:#e7f3ff; --pit:#fff4e5; --key:#e9f7ef;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,"Segoe UI","Microsoft YaHei",sans-serif;
+       color:var(--fg);line-height:1.7;background:var(--bg);}
+  .layout{display:flex;align-items:flex-start;}
+  nav{position:sticky;top:0;height:100vh;overflow-y:auto;flex:0 0 270px;
+      background:var(--side);border-right:1px solid var(--border);padding:18px 14px;font-size:14px;}
+  nav h2{font-size:14px;margin:14px 0 6px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;}
+  nav a{display:block;color:var(--accent);text-decoration:none;padding:3px 6px;border-radius:5px;}
+  nav a:hover{background:#e1e8ef;}
+  main{flex:1 1 auto;max-width:920px;padding:28px 40px 120px;}
+  h1{font-size:30px;line-height:1.3;border-bottom:2px solid var(--border);padding-bottom:12px;}
+  h2{font-size:24px;margin-top:48px;border-bottom:1px solid var(--border);padding-bottom:6px;}
+  h3{font-size:19px;margin-top:30px;color:#24292f;}
+  h4{font-size:16px;margin-top:22px;color:#24292f;}
+  code{background:#eef1f4;padding:1px 5px;border-radius:4px;font-family:Consolas,"Courier New",monospace;font-size:.92em;}
+  pre{background:var(--code-bg);color:var(--code-fg);padding:16px 18px;border-radius:8px;overflow-x:auto;
+      font-family:Consolas,"Courier New",monospace;font-size:13.5px;line-height:1.55;}
+  pre code{background:none;color:inherit;padding:0;}
+  pre .c{color:#8b949e;font-style:italic;}      /* 注释 */
+  pre .k{color:#ff7b72;}                          /* 关键字 */
+  pre .t{color:#79c0ff;}                          /* 类型 */
+  pre .s{color:#a5d6ff;}                          /* 字符串 */
+  pre .f{color:#d2a8ff;}                          /* 函数/信号 */
+  table{border-collapse:collapse;width:100%;margin:16px 0;font-size:14.5px;}
+  th,td{border:1px solid var(--border);padding:8px 10px;text-align:left;vertical-align:top;}
+  th{background:var(--side);}
+  .box{border-radius:8px;padding:12px 16px;margin:16px 0;border:1px solid var(--border);}
+  .tip{background:var(--tip);border-color:#b6daffy;}
+  .pit{background:var(--pit);border-color:#f0c089;}
+  .key{background:var(--key);border-color:#aadcc0;}
+  .box b{display:inline-block;margin-bottom:2px;}
+  .lead{font-size:17px;color:#444;}
+  .pill{display:inline-block;background:var(--accent);color:#fff;border-radius:12px;padding:1px 10px;font-size:12px;margin-right:6px;}
+  .pill.adv{background:#8250df;}
+  .pill.basic{background:var(--accent2);}
+  .filemap{font-family:Consolas,monospace;font-size:13px;background:var(--side);padding:14px 18px;border-radius:8px;border:1px solid var(--border);}
+  hr{border:none;border-top:1px solid var(--border);margin:40px 0;}
+  .small{color:var(--muted);font-size:13.5px;}
+  details{margin:10px 0;border:1px solid var(--border);border-radius:8px;padding:6px 12px;}
+  summary{cursor:pointer;font-weight:600;color:var(--accent);}
+  .map-arrow{color:var(--accent2);}
+</style>
+</head>
+<body>
+<div class="layout">
+<nav>
+  <h2>目录</h2>
+  <a href="#intro">0 · 这份指南怎么用</a>
+  <a href="#what">1 · 30 秒看懂这软件</a>
+  <a href="#cpp">2 · 从 C 到 C++/Qt：8 个新概念</a>
+  <a href="#signal">3 · 信号槽 = 软件版的“中断回调”</a>
+  <a href="#struct">4 · 工程结构与数据流</a>
+  <a href="#modules">5 · 模块逐个讲</a>
+  <a href="#m-packet" style="padding-left:18px">└ PacketBuilder（最像 C）</a>
+  <a href="#m-serial" style="padding-left:18px">└ SerialTransport</a>
+  <a href="#m-cmd" style="padding-left:18px">└ 指令库</a>
+  <a href="#m-engine" style="padding-left:18px">└ AutoSendEngine（核心）</a>
+  <a href="#m-stat" style="padding-left:18px">└ TestStatistics</a>
+  <a href="#m-log" style="padding-left:18px">└ LogManager（多线程）</a>
+  <a href="#m-ui" style="padding-left:18px">└ UI 页面 / MainWindow</a>
+  <a href="#journey">6 · 一条数据的完整旅程</a>
+  <a href="#pitfalls">7 · C 工程师最易踩的坑</a>
+  <a href="#roadmap">8 · 课后学习路线</a>
+  <a href="#exercise">9 · 动手练习（改代码）</a>
+  <a href="#build">10 · 构建与调试速查</a>
+</nav>
+<main>
+
+<h1>串口测试工具 · 代码导读与 C++/Qt 实战指南</h1>
+<p class="lead">面向<strong>只学过 C、做过单片机</strong>、对 C++/Qt 了解不多的工程师。目标：让你<strong>快速看懂这个工程每一块代码在做什么</strong>，同时用这个真实项目当“课本”，<strong>有针对性地</strong>把 C++/Qt 最该先掌握的知识补上。</p>
+
+<!-- ============================================ -->
+<h2 id="intro">0 · 这份指南怎么用</h2>
+<p>你已经有 C 的底子（变量、函数、指针、结构体、数组、<code>while(1)</code> 主循环、中断），这是巨大的优势——C++ 是 C 的超集，你写的 C 代码在 C++ 里几乎都成立。难点只在三件事：</p>
+<ol>
+  <li><strong>面向对象</strong>：把“数据 + 操作数据的函数”打包成<strong>类（class）</strong>。</li>
+  <li><strong>Qt 的信号槽</strong>：对象之间用“发信号/收信号”通信，本质就是你熟悉的<strong>回调函数</strong>，只是更安全更自动。</li>
+  <li><strong>事件循环</strong>：桌面程序没有 <code>while(1)</code>，靠一个隐藏的“事件循环”驱动，跟单片机的<strong>中断 + 主循环</strong>思路一致。</li>
+</ol>
+<p>建议阅读顺序：先看 <a href="#what">第 1 节</a> 和 <a href="#cpp">第 2、3 节</a>建立概念 → 再看 <a href="#struct">第 4 节</a>整体结构 → 然后挑 <a href="#m-packet">PacketBuilder</a>（最像 C）和 <a href="#m-engine">AutoSendEngine</a>（核心）精读 → 最后照 <a href="#roadmap">第 8 节路线</a>补课、做 <a href="#exercise">第 9 节练习</a>。</p>
+<div class="box tip"><b>📌 约定</b><br>本文出现 <span class="pill basic">基础</span> 的概念是你<strong>现在就要懂</strong>的；<span class="pill adv">进阶</span> 的可以先跳过，等读到对应模块再回来。</div>
+
+<!-- ============================================ -->
+<h2 id="what">1 · 30 秒看懂这软件是什么</h2>
+<p>它是一个 Windows 上的<strong>串口调试 + 自动测试工具</strong>，比普通串口助手多了四样定制功能：</p>
+<table>
+<tr><th>功能</th><th>通俗说</th></tr>
+<tr><td>串口收发</td><td>开关串口、手动发 HEX/ASCII、带时间戳显示、可选 BCC 校验</td></tr>
+<tr><td>协议指令库</td><td>把设备的 132 条协议命令存成一个库，可分组查看/增删改/搜索</td></tr>
+<tr><td>自动发送</td><td>选一条命令，每隔 N 毫秒发一次，发 M 次</td></tr>
+<tr><td>检测统计</td><td>自动比对“发出去的”和“收回来的”，算出丢包率 / 回复正确率 / 总成功率，并写日志</td></tr>
+</table>
+<p>界面是 5 个标签页（Tab）：<strong>串口收发 / 指令库 / 自动发送 / 结果与日志 / 设置</strong>。</p>
+
+<!-- ============================================ -->
+<h2 id="cpp">2 · 从 C 到 C++/Qt：先建立这 8 个新概念</h2>
+<p>下面每个概念都<strong>对照 C</strong> 来讲，并指出在本工程哪里能看到。</p>
+
+<h3><span class="pill basic">基础</span> ① 类 class = 升级版 struct</h3>
+<p>C 里你会这样把数据和函数分开：</p>
+<pre><code><span class="c">// C 风格</span>
+<span class="k">struct</span> Serial { <span class="t">int</span> fd; };
+<span class="t">int</span> serial_open(<span class="k">struct</span> Serial* s, <span class="k">const</span> <span class="t">char</span>* port);  <span class="c">// 函数和数据分离</span></code></pre>
+<p>C++ 把“数据 + 操作它的函数”装进同一个 <code>class</code>，函数叫<strong>成员函数</strong>，通过 <code>对象.函数()</code> 调用：</p>
+<pre><code><span class="c">// 本工程 core/SerialTransport.h（简化）</span>
+<span class="k">class</span> <span class="t">SerialTransport</span> {
+<span class="k">public:</span>
+    <span class="t">bool</span> <span class="f">open</span>(<span class="k">const</span> <span class="t">QString</span>& portName, <span class="t">qint32</span> baud, ...);  <span class="c">// 成员函数</span>
+    <span class="t">bool</span> <span class="f">send</span>(<span class="k">const</span> <span class="t">QByteArray</span>& data, ...);
+<span class="k">private:</span>
+    <span class="t">QSerialPort</span> m_serial;   <span class="c">// 成员变量（数据），m_ 前缀是本工程约定</span>
+};</code></pre>
+<p><strong>用法：</strong><code>m_transport.open("COM3", 115200, ...)</code>。</p>
+<div class="box tip"><b>对照记忆</b>：<code>public:</code> 外面能用，<code>private:</code> 只有自己能用（C 没有，靠自觉）。成员变量加 <code>m_</code> 前缀是为了一眼区分“这是对象自己的数据”。</div>
+
+<h3><span class="pill basic">基础</span> ② 头文件 .h / 源文件 .cpp / #pragma once</h3>
+<p>和 C 完全一样：<code>.h</code> 放<strong>声明</strong>（有哪些类、函数长什么样），<code>.cpp</code> 放<strong>定义</strong>（函数体）。<code>#pragma once</code> 等价于你写过的 <code>#ifndef XXX_H / #define / #endif</code> 防重复包含，只是一行搞定。</p>
+
+<h3><span class="pill basic">基础</span> ③ 引用 <code>&</code>：比指针更安全的“别名”</h3>
+<table>
+<tr><th>C（指针）</th><th>C++（引用）</th></tr>
+<tr><td><code>void f(int* p){ *p = 5; }</code><br><code>f(&x);</code></td><td><code>void f(int&amp; r){ r = 5; }</code><br><code>f(x);</code></td></tr>
+</table>
+<p>引用就是变量的“别名”，<strong>不能为空、不用解引用</strong>。本工程里大量出现 <code>const QString&amp;</code>——意思是“传进来一个字符串，我只读不改，而且不拷贝（高效）”。</p>
+<pre><code><span class="t">bool</span> <span class="f">send</span>(<span class="k">const</span> <span class="t">QByteArray</span>& data);   <span class="c">// const 引用：高效传参 + 承诺不修改</span></code></pre>
+
+<h3><span class="pill basic">基础</span> ④ Qt 的“C 库替代品”：字符串和容器</h3>
+<p>单片机里你用 <code>char buf[64]</code> 和手写数组。Qt 给了更好用、自动管内存的工具，<strong>用法直觉化、不用自己 malloc/free</strong>：</p>
+<table>
+<tr><th>你在 C 里用</th><th>本工程用的 Qt 类</th><th>干啥</th></tr>
+<tr><td><code>char[]</code> + strcpy</td><td><code>QString</code></td><td>文本字符串（界面文字、命令名）</td></tr>
+<tr><td><code>uint8_t[]</code></td><td><code>QByteArray</code></td><td>原始字节（串口收发的数据）</td></tr>
+<tr><td>手写动态数组</td><td><code>QList&lt;T&gt;</code></td><td>列表（132 条指令存在 <code>QList&lt;CommandItem&gt;</code> 里）</td></tr>
+<tr><td>查表</td><td><code>QHash&lt;K,V&gt;</code></td><td>键值映射（日志里“路径→文件句柄”）</td></tr>
+</table>
+<div class="box key"><b>🔑 关键差异</b>：这些类<strong>自己管理内存</strong>——出了作用域自动释放，不会内存泄漏。这是 C++ 的 <strong>RAII</strong> 思想（见概念⑥），是它比 C 省心的最大原因之一。</div>
+
+<h3><span class="pill basic">基础</span> ⑤ 命名空间 namespace</h3>
+<p>就是给一组函数/常量加个“姓”，避免重名。本工程 <code>PacketBuilder</code> 就是一个命名空间，调用时写 <code>PacketBuilder::fromHexText(...)</code>，<code>::</code> 读作“的”。</p>
+
+<h3><span class="pill adv">进阶</span> ⑥ 构造/析构 与 RAII（对象的“出生”和“死亡”）</h3>
+<p>C++ 的对象有两个特殊函数：<strong>构造函数</strong>（创建时自动调用，相当于初始化）和<strong>析构函数</strong>（销毁时自动调用，相当于清理）。这套机制叫 <strong>RAII</strong>：资源（内存、文件、串口）在对象出生时获取、死亡时自动归还。</p>
+<pre><code><span class="t">LogManager</span>::<span class="f">~LogManager</span>() {   <span class="c">// ~ 开头 = 析构函数，对象销毁时自动跑</span>
+    <span class="k">if</span> (m_sessionActive) <span class="f">endSession</span>(...);  <span class="c">// 程序关掉前补写日志，不丢数据</span>
+    m_thread.<span class="f">quit</span>(); m_thread.<span class="f">wait</span>();   <span class="c">// 关掉后台线程</span>
+}</code></pre>
+<div class="box tip"><b>对照单片机</b>：你以前要手动 <code>close(fd)</code>、手动 <code>free()</code>，忘了就泄漏。C++ 把“清理”绑定到析构函数，对象一销毁就自动执行，<strong>少一大类 bug</strong>。</div>
+
+<h3><span class="pill adv">进阶</span> ⑦ 指针 <code>*</code> 与 <code>new</code>：界面控件都是 new 出来的</h3>
+<p>Qt 的界面控件（按钮、输入框）必须用 <code>new</code> 在堆上创建，并指定一个<strong>父对象（parent）</strong>。关键点：<strong>父对象销毁时会自动 delete 所有子对象</strong>，所以你几乎从不手动 <code>delete</code> 控件。</p>
+<pre><code><span class="k">auto</span>* btn = <span class="k">new</span> <span class="t">QPushButton</span>(<span class="s">"发送"</span>, <span class="k">this</span>);  <span class="c">// this = 父对象；窗口关了，按钮自动释放</span></code></pre>
+<p><code>auto</code> 是“让编译器自动推断类型”，省得写一长串类型名。</p>
+
+<h3><span class="pill adv">进阶</span> ⑧ 事件循环：桌面程序的“主循环”</h3>
+<pre><code><span class="c">// main.cpp —— 整个程序的入口</span>
+<span class="t">int</span> <span class="f">main</span>(<span class="t">int</span> argc, <span class="t">char</span>* argv[]) {
+    <span class="t">QApplication</span> a(argc, argv);
+    <span class="t">MainWindow</span> w;
+    w.<span class="f">show</span>();
+    <span class="k">return</span> a.<span class="f">exec</span>();   <span class="c">// ← 这一行就是 while(1)！事件循环：等事件→分发→处理</span>
+}</code></pre>
+<div class="box key"><b>🔑 思维迁移</b>：单片机是 <code>while(1){ 处理(); }</code> + 中断打断。桌面是 <code>a.exec()</code> 这个事件循环在转，鼠标点击、串口来数据、定时器到点……都变成“事件”被分发到对应的处理函数。<strong>你不写循环，你只写“当 X 发生时该怎么办”</strong>。这正好引出下一节的信号槽。</div>
+
+<!-- ============================================ -->
+<h2 id="signal">3 · 信号槽 = 软件版的“中断回调”（最重要！）</h2>
+<p>这是 Qt 的灵魂，也是 C 工程师最需要转过弯的点。先用你熟的东西类比：</p>
+<table>
+<tr><th>单片机</th><th>Qt 信号槽</th></tr>
+<tr><td>串口收到字节 → 触发<strong>中断</strong> → 跳到<strong>中断服务函数</strong></td><td>串口收到字节 → 发出<strong>信号</strong> <code>bytesReceived</code> → 调用连接的<strong>槽函数</strong></td></tr>
+<tr><td>你在初始化时<strong>注册中断向量</strong></td><td>你在初始化时用 <code>connect()</code> <strong>把信号接到槽</strong></td></tr>
+</table>
+<p><strong>信号（signal）</strong>＝“某件事发生了”的通知；<strong>槽（slot）</strong>＝收到通知后要执行的普通函数；<strong>connect</strong>＝把两者连起来（注册回调）。看本工程真实例子：</p>
+<pre><code><span class="c">// 串口对象“收到数据”这件事，交给基础页的 onBytesReceived 处理</span>
+<span class="f">connect</span>(m_transport, &<span class="t">SerialTransport</span>::<span class="f">bytesReceived</span>,
+        <span class="k">this</span>,        &<span class="t">BasicSerialPage</span>::<span class="f">onBytesReceived</span>);
+<span class="c">//        ↑发信号的对象   ↑哪个信号                ↑收的对象  ↑用哪个槽函数</span></code></pre>
+<p>之后 <code>SerialTransport</code> 内部只要 <code>emit bytesReceived(data);</code>（发射信号），<code>onBytesReceived(data)</code> 就会被自动调用——<strong>发信号的人完全不需要知道谁在听</strong>，这就是解耦。</p>
+<div class="box tip"><b>为什么比 C 的函数指针回调好？</b><br>① 一个信号能接多个槽（本工程串口数据同时给“显示”和“引擎统计”）；② 对象销毁时连接自动断开，不会像 C 那样回调到已释放的对象上导致崩溃；③ 还能跨线程安全传递（日志线程就靠它）。</div>
+
+<!-- ============================================ -->
+<h2 id="struct">4 · 工程结构与数据流</h2>
+<div class="filemap">
+01_Software/serial_test_tool/<br>
+├── main.cpp                  <span class="c"># 入口，启动事件循环</span><br>
+├── app/MainWindow            <span class="c"># 主窗口：装 5 个标签页 + 持有所有“核心对象”</span><br>
+├── core/                     <span class="c"># 「业务逻辑」，不含界面，可独立测试</span><br>
+│   ├── SerialTransport       <span class="c"># 串口收发（包住 QSerialPort）</span><br>
+│   ├── PacketBuilder         <span class="c"># HEX/ASCII↔字节、BCC 计算（纯函数）</span><br>
+│   ├── CommandItem / CommandLibrary <span class="c"># 指令的数据结构 + 指令库(JSON 存盘)</span><br>
+│   ├── AutoSendEngine        <span class="c"># 自动发送状态机（核心）</span><br>
+│   ├── TestStatistics        <span class="c"># 计数与各种率</span><br>
+│   ├── LogManager            <span class="c"># 异步写日志（唯一的后台线程）</span><br>
+│   ├── AppConfig.h / CsvUtil.h <span class="c"># 配置键、CSV 转义（共享小工具）</span><br>
+├── ui/                       <span class="c"># 「界面」，每个标签页一个类</span><br>
+│   ├── BasicSerialPage / CommandLibraryPage / AutoSendPage<br>
+│   ├── ResultPage / SettingsPage / CommandEditDialog / RateBar<br>
+└── resources/default_commands.json <span class="c"># 132 条内置指令（打包进 exe）</span>
+</div>
+<div class="box key"><b>🔑 一条铁律：core/ 不碰界面，ui/ 不写业务</b><br>这叫<strong>分层</strong>。好处：业务逻辑（怎么发、怎么算）和界面（长什么样）互不干扰，改界面不会弄坏统计逻辑。你以后做任何稍大的项目都该这么分。</p></div>
+
+<h4>谁拥有谁（对象关系）</h4>
+<p><code>MainWindow</code> 是“大管家”，它<strong>持有</strong>全局唯一的几个核心对象，再把它们的“地址”（指针/引用）发给各个页面共用：</p>
+<pre><code><span class="c">// app/MainWindow.h —— 成员声明顺序很重要（见第7节坑④）</span>
+<span class="t">SerialTransport</span> m_transport;            <span class="c">// 1. 串口</span>
+<span class="t">CommandLibrary</span>  m_library;              <span class="c">// 2. 指令库</span>
+<span class="t">AutoSendEngine</span>  m_engine{&m_transport}; <span class="c">// 3. 引擎，要用到串口</span>
+<span class="t">LogManager</span>      m_log;                  <span class="c">// 4. 日志</span></code></pre>
+
+<!-- ============================================ -->
+<h2 id="modules">5 · 模块逐个讲</h2>
+
+<!-- PacketBuilder -->
+<h3 id="m-packet">📦 PacketBuilder —— 最像 C，建议从这里读起</h3>
+<p><strong>职责</strong>：纯粹的数据转换工具，没有界面、没有状态、没有对象——就是一组函数，和你写单片机里的 <code>hex2bin()</code> 一模一样。它放在 <code>namespace PacketBuilder</code> 里。</p>
+<pre><code><span class="c">// 把 "CA 01 0A" 这样的文本，转成真正的字节 {0xCA,0x01,0x0A}</span>
+<span class="t">QByteArray</span> <span class="f">fromHexText</span>(<span class="k">const</span> <span class="t">QString</span>& text, <span class="t">bool</span>* ok);
+<span class="c">// 逐字节异或，算出 1 字节 BCC 校验</span>
+<span class="t">quint8</span> <span class="f">bccXor</span>(<span class="k">const</span> <span class="t">QByteArray</span>& data);</code></pre>
+<p>BCC 计算和你在单片机里写的<strong>完全一样</strong>：</p>
+<pre><code><span class="t">quint8</span> <span class="f">bccXor</span>(<span class="k">const</span> <span class="t">QByteArray</span>& data){
+    <span class="t">quint8</span> bcc = <span class="s">0</span>;
+    <span class="k">for</span> (<span class="k">const</span> <span class="t">char</span> b : data) bcc ^= (<span class="t">quint8</span>)b;  <span class="c">// 范围 for：遍历每个字节</span>
+    <span class="k">return</span> bcc;
+}</code></pre>
+<div class="box tip"><b>新语法点</b>：<code>for (const char b : data)</code> 叫<strong>范围 for</strong>，等于“对 data 里的每个字节 b”，比 C 的 <code>for(i=0;i&lt;n;i++)</code> 简洁。<code>quint8</code> 就是 Qt 给 <code>uint8_t</code> 起的名字。</div>
+<div class="box pit"><b>这里曾有个真 bug（已修）</b>：判断字符是否是十六进制，原来用 C 的 <code>isxdigit()</code>，但传入非 ASCII 字符（如中文/重音字母）时是<strong>未定义行为</strong>，可能崩溃。改成手写范围判断 <code>(u&gt;='0'&amp;&amp;u&lt;='9')||...</code> 才安全。<strong>教训：C 标准库的 <code>isxxx()</code> 函数对“负的 char”有坑</strong>。</div>
+
+<!-- SerialTransport -->
+<h3 id="m-serial">🔌 SerialTransport —— 把 Qt 的串口包一层</h3>
+<p><strong>职责</strong>：封装 Qt 自带的 <code>QSerialPort</code>，对外只暴露 <code>open/close/send</code> 和几个信号。它<strong>不懂任何协议</strong>，只负责“原始字节进出”。</p>
+<pre><code><span class="k">signals</span>:                                    <span class="c">// 这个对象会发出的“通知”</span>
+    <span class="k">void</span> <span class="f">bytesReceived</span>(<span class="k">const</span> <span class="t">QByteArray</span>& data); <span class="c">// 收到字节了</span>
+    <span class="k">void</span> <span class="f">offline</span>(<span class="k">const</span> <span class="t">QString</span>& reason);       <span class="c">// 串口被拔了</span>
+    <span class="k">void</span> <span class="f">portStateChanged</span>(<span class="t">bool</span> open);          <span class="c">// 开/关状态变了</span></code></pre>
+<p>内部把 <code>QSerialPort</code> 的“有数据可读”信号接到自己的处理函数，再转发成自己的 <code>bytesReceived</code> 信号：</p>
+<pre><code><span class="k">void</span> <span class="t">SerialTransport</span>::<span class="f">onReadyRead</span>(){
+    <span class="t">QByteArray</span> data = m_serial.<span class="f">readAll</span>();
+    <span class="k">if</span> (!data.<span class="f">isEmpty</span>()) <span class="k">emit</span> <span class="f">bytesReceived</span>(data);  <span class="c">// 转发出去</span>
+}</code></pre>
+<div class="box tip"><b>为什么要“包一层”而不直接用 QSerialPort？</b>这叫<strong>封装</strong>：把第三方库藏在自己的简单接口后面。好处是上层代码只认 <code>bytesReceived</code>，将来哪怕换成 TCP，只要发同样的信号，上层一行都不用改。</div>
+
+<!-- 指令库 -->
+<h3 id="m-cmd">🗂️ CommandItem + CommandLibrary —— 数据结构 + 存盘</h3>
+<p><code>CommandItem</code> 是一条指令的<strong>数据结构</strong>（就是个升级 struct），字段如发送内容、正确回复、是否加 BCC 等。<code>CommandLibrary</code> 管理一整个 <code>QList&lt;CommandItem&gt;</code>，并负责<strong>存成 JSON 文件</strong>（重启后还在）。</p>
+<pre><code><span class="c">// 内存里就是一个列表；增删改查都在这个列表上操作</span>
+<span class="t">QList</span>&lt;<span class="t">CommandItem</span>&gt; m_items;
+<span class="c">// 存盘：把列表转成 JSON 文本写文件（QJsonDocument/QJsonArray 是 Qt 自带）</span></code></pre>
+<div class="box tip"><b>JSON 是什么？</b>一种人类可读的文本数据格式，像“带括号的配置文件”。Qt 自带读写工具，不用自己解析。打开 <code>resources/default_commands.json</code> 看一眼就懂了。</div>
+<div class="box pit"><b>修过的坑</b>：首次运行要把内置 132 条写到用户目录，原来没检查“写失败”就当成功了——如果目录只读，用户改的指令会悄悄丢。现在写失败会弹提示。<strong>教训：凡是 I/O（文件/串口）都要检查返回值</strong>，这点和单片机一样。</div>
+
+<!-- AutoSendEngine -->
+<h3 id="m-engine">⚙️ AutoSendEngine —— 核心，一个“状态机”</h3>
+<p><strong>职责</strong>：自动发送的大脑。它不是 <code>while</code> 死循环（那样会卡死界面！），而是一个<strong>事件驱动的状态机</strong>，靠定时器和信号一步步推进。这正好对应你单片机里用<strong>定时器中断 + 状态变量</strong>跑流程的写法。</p>
+<h4>两种模式</h4>
+<ul>
+<li><strong>开检测（ping-pong）</strong>：发一条 → 等回复或超时 → 间隔后发下一条。请求和回复严格一对一，统计才准。</li>
+<li><strong>关检测（固定节拍）</strong>：只管按间隔发，不等回复，只数发了多少次。</li>
+</ul>
+<h4>一轮的生命周期（ping-pong）</h4>
+<pre><code><span class="k">void</span> <span class="t">AutoSendEngine</span>::<span class="f">beginRound</span>(){
+    m_rxBuffer.<span class="f">clear</span>();             <span class="c">// 清空本轮接收缓冲</span>
+    m_roundTimer.<span class="f">restart</span>();          <span class="c">// 开始计时（为了算响应时间）</span>
+    <span class="k">if</span> (!m_transport-&gt;<span class="f">send</span>(m_payload, &err)){ ... <span class="k">return</span>; } <span class="c">// 发！</span>
+    m_stats.<span class="f">recordSend</span>();           <span class="c">// 发成功才计数（修过的坑#6）</span>
+    m_inRound = <span class="k">true</span>;
+    m_timeoutTimer-&gt;<span class="f">start</span>(m_timeoutMs); <span class="c">// 启动本轮超时定时器</span>
+}</code></pre>
+<p>接下来有两种结局，都由“事件”触发：</p>
+<pre><code><span class="c">// 结局A：串口来数据了（信号触发）</span>
+<span class="k">void</span> <span class="f">onBytesReceived</span>(<span class="k">const</span> <span class="t">QByteArray</span>& d){
+    m_rxBuffer.<span class="f">append</span>(d);                      <span class="c">// 累加</span>
+    <span class="k">if</span> (m_rxBuffer.<span class="f">contains</span>(m_expected))      <span class="c">// 收到的包含正确回复？</span>
+        <span class="f">resolveRound</span>(<span class="k">true</span>,<span class="k">true</span>, 用时);          <span class="c">// → 匹配成功</span>
+}
+<span class="c">// 结局B：超时定时器到点了（信号触发）</span>
+<span class="k">void</span> <span class="f">onTimeout</span>(){
+    <span class="k">bool</span> got = !m_rxBuffer.<span class="f">isEmpty</span>();
+    <span class="f">resolveRound</span>(got, <span class="k">false</span>, -<span class="s">1</span>);  <span class="c">// 收到过字节=回复错误；啥都没收=丢包</span>
+}</code></pre>
+<div class="box key"><b>🔑 这就是“事件驱动”的精髓</b>：函数发完就<strong>立刻返回</strong>，把界面让出去；真正的“等回复/等超时”是靠信号在未来某刻把你叫回来。所以发 1 万次也不会卡界面。对比单片机：你绝不会在主循环里 <code>delay(100)</code> 傻等，而是开定时器中断——一个道理。</div>
+
+<!-- TestStatistics -->
+<h3 id="m-stat">📊 TestStatistics —— 计数与算率</h3>
+<p>纯数据类，几个 64 位计数器 + 算各种率的函数。<strong>为什么用 64 位（<code>quint64</code>）？</strong>因为最大发 1000 万次，虽然没超 32 位，但留余量、避免溢出，是好习惯。</p>
+<pre><code><span class="t">double</span> <span class="f">lossRate</span>() <span class="k">const</span> {            <span class="c">// 丢包率 = 超时数 / 发送数</span>
+    <span class="k">if</span> (m_send == <span class="s">0</span>) <span class="k">return</span> <span class="s">0.0</span>;     <span class="c">// 防止除以 0！</span>
+    <span class="k">return</span> (<span class="t">double</span>)m_timeout / m_send;
+}</code></pre>
+<div class="box tip"><b>函数后面的 <code>const</code></b> 表示“这个函数只读、不修改对象”，是 C++ 给读者和编译器的承诺。看到它就知道“调它很安全，不会改数据”。</div>
+
+<!-- LogManager -->
+<h3 id="m-log">🧵 LogManager —— 唯一的后台线程（进阶）</h3>
+<p><strong>职责</strong>：把日志写到 CSV 文件。<strong>难点</strong>：写文件慢，如果在主线程写，发 1000 万次时界面会卡。解决办法是<strong>开一个后台线程专门写文件</strong>，主线程只把“要写的行”丢给它。</p>
+<pre><code>m_writer = <span class="k">new</span> <span class="t">LogWriter</span>;
+m_writer-&gt;<span class="f">moveToThread</span>(&m_thread);          <span class="c">// 把写文件的对象搬到后台线程</span>
+<span class="f">connect</span>(<span class="k">this</span>, &<span class="t">LogManager</span>::<span class="f">writeLinesRequested</span>,
+        m_writer, &<span class="t">LogWriter</span>::<span class="f">writeLines</span>);     <span class="c">// 跨线程信号：自动排队，安全</span></code></pre>
+<div class="box key"><b>🔑 跨线程为什么安全？</b>主线程 <code>emit writeLinesRequested(...)</code>，Qt 会把这次调用<strong>排队</strong>到后台线程去执行，不会两个线程同时碰同一块数据。这是信号槽除解耦外的第二大杀器。<strong>多线程是本工程最难的部分，初学可先理解“为什么要它”，实现细节后面再啃。</strong></div>
+<div class="box pit"><b>修过的坑</b>：①程序中途关闭时漏写汇总行——析构里补写；②文件句柄一直不关——改成每次测试结束就关。<strong>多线程 + 文件，是最容易出资源泄漏和时序 bug 的地方</strong>，所以这块我们专门做了 code review。</div>
+
+<!-- UI -->
+<h3 id="m-ui">🖼️ UI 页面 与 MainWindow —— 界面怎么搭</h3>
+<p>每个标签页是一个继承自 <code>QWidget</code> 的类。界面<strong>用代码搭</strong>（不用拖拽设计器）：new 出控件 → 放进<strong>布局（layout）</strong> → connect 信号槽。</p>
+<pre><code><span class="k">auto</span>* root = <span class="k">new</span> <span class="t">QVBoxLayout</span>(<span class="k">this</span>);   <span class="c">// 垂直布局：控件从上往下排</span>
+m_sendButton = <span class="k">new</span> <span class="t">QPushButton</span>(<span class="s">"发送"</span>, <span class="k">this</span>);
+root-&gt;<span class="f">addWidget</span>(m_sendButton);
+<span class="f">connect</span>(m_sendButton, &<span class="t">QPushButton</span>::<span class="f">clicked</span>,   <span class="c">// 按钮“被点击”信号</span>
+        <span class="k">this</span>, &<span class="t">BasicSerialPage</span>::<span class="f">sendManual</span>);    <span class="c">// → 接到“执行发送”槽</span></code></pre>
+<div class="box tip"><b>布局（Layout）</b>是 Qt 自动排版器：你说“竖着排/横着排/表格排”，窗口缩放时控件自动跟着调整，不用你算坐标。对比：单片机 OLED 上你得自己算每个字的像素位置——Qt 帮你算。</div>
+<p><code>MainWindow</code> 则把 5 个页面塞进 <code>QTabWidget</code>（标签容器），并把核心对象的地址分发给各页。它还负责“测试运行时锁住其它标签页”这类全局协调。</p>
+
+<!-- ============================================ -->
+<h2 id="journey">6 · 一条数据的完整旅程（把所有模块串起来）</h2>
+<p>以“点开始测试 → 看到统计更新”为例，跟着信号走一遍：</p>
+<ol>
+<li><b>AutoSendPage</b>：你点“开始测试” → 槽函数 <code>startTest()</code> 收集间隔/次数/指令，调 <code>m_engine.start(cfg)</code>。</li>
+<li><b>AutoSendEngine</b>：<code>beginRound()</code> → 调 <code>m_transport.send(字节)</code> 发出去，启动超时定时器。<span class="map-arrow">↓</span></li>
+<li><b>SerialTransport</b>：串口真正把字节写出去；设备回了数据 → <code>QSerialPort</code> 触发 → <code>emit bytesReceived(data)</code>。<span class="map-arrow">↓</span></li>
+<li><b>AutoSendEngine</b>（接了该信号）：<code>onBytesReceived</code> 比对 → 匹配成功 → <code>m_stats.recordMatch()</code> 更新计数 → <code>emit roundResolved()</code> 和（失败时）<code>roundFailed(...)</code>。<span class="map-arrow">↓</span></li>
+<li><b>ResultPage</b>（接了 <code>roundFailed</code>）：往异常明细表加一行。<b>MainWindow</b>（接了 <code>roundCompleted</code>）：转给 <b>LogManager</b> 写日志。</li>
+<li><b>AutoSendPage / ResultPage</b>：各自有个 200~300ms 的<strong>刷新定时器</strong>，定时去 <code>m_engine.statistics()</code> 读最新数字刷到界面——<strong>不是每条都刷</strong>，否则高速时界面会卡。</li>
+</ol>
+<div class="box key"><b>🔑 看懂这张图，你就看懂了整个工程</b>：没有谁直接调用谁的界面，全靠“发信号—接信号”。数据在 core/ 里流动和计算，ui/ 只在定时器到点时“拍个快照”显示。</div>
+
+<!-- ============================================ -->
+<h2 id="pitfalls">7 · C 工程师最容易踩的 6 个坑</h2>
+<table>
+<tr><th>坑</th><th>说明 & 怎么避</th></tr>
+<tr><td>① 对象被悄悄拷贝</td><td>C++ 里 <code>QByteArray a = b;</code> 是<strong>拷贝一份</strong>。传参想避免拷贝就用 <code>const&amp;</code>。本工程大量用 <code>const QByteArray&amp;</code> 正是为此。</td></tr>
+<tr><td>② 悬空指针/引用</td><td>页面拿的是核心对象的指针。只要核心对象比页面活得久（MainWindow 持有它们）就安全。<strong>别保存一个临时对象的地址。</strong></td></tr>
+<tr><td>③ 在槽函数里干重活</td><td>槽函数运行在主线程，里面 <code>delay</code> 或大循环会卡死界面。耗时的事交给定时器分步做或丢给后台线程（见 LogManager）。</td></tr>
+<tr><td>④ 成员初始化顺序</td><td>类成员<strong>按声明顺序</strong>构造，不是按你写初始化的顺序。本工程 <code>m_engine{&amp;m_transport}</code> 必须声明在 <code>m_transport</code> 之后，否则用到还没造好的串口。</td></tr>
+<tr><td>⑤ 整数除法 & 除零</td><td>和 C 一样：<code>1/2==0</code>。算率前先转 <code>double</code>，且先判分母是否为 0（见 TestStatistics）。</td></tr>
+<tr><td>⑥ char 的符号</td><td><code>char</code> 可能是有符号的，<code>(int)某字节</code> 可能变负数。处理字节统一用 <code>quint8/unsigned char</code>（PacketBuilder 的 isxdigit 坑就是这个）。</td></tr>
+</table>
+
+<!-- ============================================ -->
+<h2 id="roadmap">8 · 课后学习路线（针对性补课）</h2>
+<p>不用从头啃 C++ 大部头。按下面顺序补，<strong>每学一个就回工程里找它在哪用</strong>，效果最好。</p>
+
+<h3>第一阶段 · 必修（看懂本工程的最小集）</h3>
+<table>
+<tr><th>知识点</th><th>在本工程哪里用</th></tr>
+<tr><td>class / 成员函数 / public-private</td><td>所有 core/ 类</td></tr>
+<tr><td>头文件 vs 源文件、#pragma once</td><td>每个 .h/.cpp</td></tr>
+<tr><td>引用 <code>&amp;</code> 与 <code>const&amp;</code> 传参</td><td>几乎所有函数参数</td></tr>
+<tr><td>构造函数 / 析构函数 / 初始化列表</td><td>每个类的 ctor；<code>~LogManager</code></td></tr>
+<tr><td>QString / QByteArray / QList 基本用法</td><td>到处都是</td></tr>
+<tr><td><strong>Qt 信号槽 + connect</strong>（重中之重）</td><td>SerialTransport、AutoSendEngine、所有页面</td></tr>
+<tr><td>Qt 事件循环、QApplication</td><td>main.cpp</td></tr>
+</table>
+
+<h3>第二阶段 · 进阶（能独立改功能）</h3>
+<table>
+<tr><th>知识点</th><th>在本工程哪里用</th></tr>
+<tr><td>QTimer（单次/重复）做非阻塞延时</td><td>AutoSendEngine 的节拍/超时；UI 刷新</td></tr>
+<tr><td>QWidget + 布局（QVBoxLayout/QGridLayout）</td><td>所有页面的 buildUi()</td></tr>
+<tr><td>常用控件：QPushButton/QComboBox/QSpinBox/QTableWidget</td><td>各页面</td></tr>
+<tr><td>QSettings 存配置、QFile 读写、QJsonDocument</td><td>AppConfig、CommandLibrary、LogManager</td></tr>
+<tr><td>枚举类 <code>enum class</code>（如 State/Outcome）</td><td>AutoSendEngine</td></tr>
+<tr><td>lambda 匿名函数 <code>[](){...}</code></td><td>MainWindow 里的 connect</td></tr>
+</table>
+
+<h3>第三阶段 · 选修（想深入/做大项目）</h3>
+<table>
+<tr><th>知识点</th><th>价值</th></tr>
+<tr><td>QThread + moveToThread 多线程模型</td><td>读懂 LogManager；做高性能 IO</td></tr>
+<tr><td>RAII、智能指针（unique_ptr/shared_ptr）</td><td>彻底告别手动 delete</td></tr>
+<tr><td>STL/Qt 容器与算法、模板基础</td><td>写更通用的代码</td></tr>
+<tr><td>CMake 构建系统</td><td>看懂 CMakeLists.txt，管理大工程</td></tr>
+<tr><td>Model/View（QAbstractItemModel）</td><td>表格数据量大时比 QTableWidget 更专业</td></tr>
+</table>
+<div class="box tip"><b>学习资源建议</b>：① C++ 基础看《C++ Primer（中文版）》前 1-7 章即可起步；② Qt 官方文档（doc.qt.io）每个类都有例子，遇到 <code>QTimer</code> 就直接搜 <code>QTimer</code>；③ 善用本工程：改一行→编译→看效果，是最快的学法。</div>
+
+<!-- ============================================ -->
+<h2 id="exercise">9 · 动手练习（从易到难，改真代码）</h2>
+<ol>
+<li><span class="pill basic">热身</span> 把主窗口标题从“串口测试工具”改成别的（<code>MainWindow::buildUi</code> 的 <code>setWindowTitle</code>）。体会“改→编译→运行”。</li>
+<li><span class="pill basic">基础</span> 在 BasicSerialPage 的波特率下拉框里加一个 <code>230400</code>。找到 <code>baudRates</code> 列表加一项。</li>
+<li><span class="pill basic">基础</span> 给统计加一个“响应时间中位数”显示？先只在 TestStatistics 加个返回固定值的函数，连到界面，跑通整条链路。</li>
+<li><span class="pill adv">进阶</span> 在结果页加一个按钮“复制汇总到剪贴板”（用 <code>QApplication::clipboard()</code>）。练习：new 按钮 + connect + 写槽函数。</li>
+<li><span class="pill adv">进阶</span> 给指令编辑对话框加“发送内容不能为空”的校验（仿照已有的 name 校验）。</li>
+<li><span class="pill adv">挑战</span> 读懂 AutoSendEngine 后，加一个“失败立即停止”的可选项：检测到第一次 mismatch/timeout 就 stop。</li>
+</ol>
+
+<!-- ============================================ -->
+<h2 id="build">10 · 构建与调试速查</h2>
+<h4>命令行编译（已验证）</h4>
+<pre><code><span class="c"># PowerShell：先把 Qt 自带工具链加进 PATH</span>
+$env:Path = <span class="s">"D:\QT\Tools\CMake_64\bin;D:\QT\Tools\Ninja;D:\QT\Tools\mingw1120_64\bin;"</span> + $env:Path
+<span class="c"># 首次：配置（生成 build 目录）</span>
+cmake -S &lt;工程目录&gt; -B &lt;工程目录&gt;\build -G Ninja `
+      -DCMAKE_PREFIX_PATH=<span class="s">"D:/QT/6.5.3/mingw_64"</span> `
+      -DCMAKE_CXX_COMPILER=<span class="s">"D:/QT/Tools/mingw1120_64/bin/g++.exe"</span>
+<span class="c"># 以后每次改完只需：</span>
+cmake --build &lt;工程目录&gt;\build</code></pre>
+<h4>或者用 Qt Creator</h4>
+<p>直接用 Qt Creator 打开 <code>CMakeLists.txt</code>，选 MinGW 套件，点左下角▶运行。<strong>初学强烈推荐用 IDE</strong>：能断点调试、看变量、自动补全，比命令行友好得多。</p>
+<h4>读代码的入口顺序</h4>
+<p><code>main.cpp</code> → <code>MainWindow::buildUi()</code>（看 5 个页面怎么装起来）→ 挑一个页面看它的 <code>buildUi</code> 和槽函数 → 跟着 connect 跳到对应的 core 类。</p>
+
+<hr>
+<p class="small">本指南随工程演进可更新。工程的“主控文档”是仓库根目录的 <code>CLAUDE.md</code>（记录决策、进度、约束）；协议细节见 <code>00_Doc/serial_protocol_summary.md</code>；功能需求见 <code>00_Doc/串口测试工具软件功能需求表_V1.1.md</code>。</p>
+
+</main>
+</div>
+</body>
+</html>
