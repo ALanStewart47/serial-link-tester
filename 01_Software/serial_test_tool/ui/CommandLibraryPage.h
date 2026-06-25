@@ -3,6 +3,7 @@
 #include <QWidget>
 
 class CommandLibrary;
+class SerialTransport;
 
 class QLineEdit;
 class QPushButton;
@@ -17,7 +18,7 @@ class CommandLibraryPage : public QWidget
     Q_OBJECT
 
 public:
-    explicit CommandLibraryPage(CommandLibrary *library, QWidget *parent = nullptr);
+    CommandLibraryPage(CommandLibrary *library, SerialTransport *transport, QWidget *parent = nullptr);
 
 private slots:
     void reload();
@@ -28,6 +29,9 @@ private slots:
     void editCommand();
     void deleteCommand();
     void restoreDefaults();
+    void importLibrary();
+    void exportLibrary();
+    void sendOnce();
 
 private:
     void buildUi();
@@ -35,12 +39,16 @@ private:
     bool matchesFilter(const QString &commandId) const;
 
     CommandLibrary *m_library = nullptr;
+    SerialTransport *m_transport = nullptr;
 
     QLineEdit *m_searchEdit = nullptr;
     QTreeWidget *m_tree = nullptr;
+    QPushButton *m_sendButton = nullptr;
     QPushButton *m_addButton = nullptr;
     QPushButton *m_copyButton = nullptr;
     QPushButton *m_editButton = nullptr;
     QPushButton *m_deleteButton = nullptr;
+    QPushButton *m_importButton = nullptr;
+    QPushButton *m_exportButton = nullptr;
     QPushButton *m_restoreButton = nullptr;
 };

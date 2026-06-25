@@ -2,9 +2,12 @@
 
 #include "core/CommandItem.h"
 #include "core/CommandLibrary.h"
+#include "core/PacketBuilder.h"
+#include "core/SerialTransport.h"
 #include "ui/CommandEditDialog.h"
 
 #include <QBrush>
+#include <QFileDialog>
 #include <QHash>
 #include <QHBoxLayout>
 #include <QHeaderView>
@@ -25,9 +28,10 @@ const QStringList kGroupOrder = {QStringLiteral("digital"), QStringLiteral("stro
                                  QStringLiteral("common"), QStringLiteral("program")};
 } // namespace
 
-CommandLibraryPage::CommandLibraryPage(CommandLibrary *library, QWidget *parent)
+CommandLibraryPage::CommandLibraryPage(CommandLibrary *library, SerialTransport *transport, QWidget *parent)
     : QWidget(parent)
     , m_library(library)
+    , m_transport(transport)
 {
     buildUi();
     connect(m_library, &CommandLibrary::changed, this, &CommandLibraryPage::reload);
@@ -48,15 +52,22 @@ void CommandLibraryPage::buildUi()
     m_searchEdit->setPlaceholderText(QStringLiteral("按名称 / 编号 / 发送内容 / 备注过滤"));
     bar->addWidget(m_searchEdit, 1);
 
+    m_sendButton = new QPushButton(QStringLiteral("单发"), this);
+    m_sendButton->setToolTip(QStringLiteral("把选中指令立即发送一次（需先在“串口收发”页打开串口）"));
     m_addButton = new QPushButton(QStringLiteral("新增"), this);
     m_copyButton = new QPushButton(QStringLiteral("复制"), this);
     m_editButton = new QPushButton(QStringLiteral("修改"), this);
     m_deleteButton = new QPushButton(QStringLiteral("删除"), this);
+    m_importButton = new QPushButton(QStringLiteral("导入"), this);
+    m_exportButton = new QPushButton(QStringLiteral("导出"), this);
     m_restoreButton = new QPushButton(QStringLiteral("恢复默认"), this);
+    bar->addWidget(m_sendButton);
     bar->addWidget(m_addButton);
     bar->addWidget(m_copyButton);
     bar->addWidget(m_editButton);
     bar->addWidget(m_deleteButton);
+    bar->addWidget(m_importButton);
+    bar->addWidget(m_exportButton);
     bar->addWidget(m_restoreButton);
     root->addLayout(bar);
 
@@ -80,6 +91,9 @@ void CommandLibraryPage::buildUi()
     connect(m_copyButton, &QPushButton::clicked, this, &CommandLibraryPage::copyCommand);
     connect(m_editButton, &QPushButton::clicked, this, &CommandLibraryPage::editCommand);
     connect(m_deleteButton, &QPushButton::clicked, this, &CommandLibraryPage::deleteCommand);
+    connect(m_sendButton, &QPushButton::clicked, this, &CommandLibraryPage::sendOnce);
+    connect(m_importButton, &QPushButton::clicked, this, &CommandLibraryPage::importLibrary);
+    connect(m_exportButton, &QPushButton::clicked, this, &CommandLibraryPage::exportLibrary);
     connect(m_restoreButton, &QPushButton::clicked, this, &CommandLibraryPage::restoreDefaults);
 }
 
@@ -189,6 +203,7 @@ void CommandLibraryPage::onSelectionChanged()
     m_copyButton->setEnabled(isLeaf);
     m_editButton->setEnabled(isLeaf && !builtin);
     m_deleteButton->setEnabled(isLeaf && !builtin);
+    m_sendButton->setEnabled(isLeaf);
 }
 
 void CommandLibraryPage::onSearchChanged()
@@ -289,5 +304,72 @@ void CommandLibraryPage::restoreDefaults()
     QString err;
     if (!m_library->restoreDefaults(&err)) {
         QMessageBox::warning(this, QStringLiteral("恢复失败"), err);
+    }
+}
+
+void CommandLibraryPage::importLibrary()
+{
+    const QString path = QFileDialog::getOpenFileName(this, QStringLiteral("导入指令库"),
+        QString(), QStringLiteral("指令库 JSON (*.json);;所有文件 (*.*)"));
+    if (path.isEmpty()) {
+        return;
+    }
+    QString err;
+    const int n = m_library->importFromFile(path, &err);
+    if (n < 0) {
+        QMessageBox::warning(this, QStringLiteral("导入失败"), err);
+    } else {
+        QMessageBox::information(this, QStringLiteral("导入完成"),
+            QStringLiteral("已导入 %1 条指令（ID 冲突的已自动改名）。").arg(n));
+    }
+}
+
+void CommandLibraryPage::exportLibrary()
+{
+    const QString path = QFileDialog::getSaveFileName(this, QStringLiteral("导出指令库"),
+        QStringLiteral("commands_export.json"), QStringLiteral("指令库 JSON (*.json)"));
+    if (path.isEmpty()) {
+        return;
+    }
+    QString err;
+    if (!m_library->exportToFile(path, &err)) {
+        QMessageBox::warning(this, QStringLiteral("导出失败"), err);
+    } else {
+        QMessageBox::information(this, QStringLiteral("导出完成"),
+            QStringLiteral("已导出 %1 条指令到：\n%2").arg(m_library->items().size()).arg(path));
+    }
+}
+
+void CommandLibraryPage::sendOnce()
+{
+    const QString id = selectedCommandId();
+    const CommandItem *cmd = id.isEmpty() ? nullptr : m_library->findById(id);
+    if (!cmd) {
+        return;
+    }
+    if (!m_transport->isOpen()) {
+        QMessageBox::warning(this, QStringLiteral("串口未打开"),
+            QStringLiteral("请先到“串口收发”页打开串口，再单发指令。"));
+        return;
+    }
+    // 按指令配置生成字节：HEX(可选 BCC) / ASCII(支持转义)
+    QByteArray payload;
+    bool ok = true;
+    if (cmd->sendFormat == QStringLiteral("hex")) {
+        payload = PacketBuilder::fromHexText(cmd->sendData, &ok);
+        if (ok && cmd->enableBcc) {
+            payload = PacketBuilder::appendBcc(payload);
+        }
+    } else {
+        payload = PacketBuilder::fromAsciiEscaped(cmd->sendData, &ok);
+    }
+    if (!ok) {
+        QMessageBox::warning(this, QStringLiteral("发送内容格式错误"),
+            QStringLiteral("指令「%1」的发送内容无法解析。").arg(cmd->commandName));
+        return;
+    }
+    QString err;
+    if (!m_transport->send(payload, &err)) {
+        QMessageBox::critical(this, QStringLiteral("发送失败"), err);
     }
 }

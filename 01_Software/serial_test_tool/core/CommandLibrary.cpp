@@ -121,6 +121,59 @@ bool CommandLibrary::restoreDefaults(QString *errorMessage)
     return true;
 }
 
+bool CommandLibrary::exportToFile(const QString &path, QString *errorMessage) const
+{
+    QJsonArray arr;
+    for (const CommandItem &item : m_items) {
+        arr.append(item.toJson());
+    }
+    QFile file(path);
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+        if (errorMessage) {
+            *errorMessage = QStringLiteral("导出失败：%1").arg(file.errorString());
+        }
+        return false;
+    }
+    file.write(QJsonDocument(arr).toJson(QJsonDocument::Indented));
+    file.close();
+    return true;
+}
+
+int CommandLibrary::importFromFile(const QString &path, QString *errorMessage)
+{
+    QFile file(path);
+    if (!file.open(QIODevice::ReadOnly)) {
+        if (errorMessage) {
+            *errorMessage = QStringLiteral("打开文件失败：%1").arg(file.errorString());
+        }
+        return -1;
+    }
+    const QByteArray json = file.readAll();
+    file.close();
+
+    QList<CommandItem> incoming;
+    if (!parseJsonArray(json, &incoming, errorMessage)) {
+        return -1;
+    }
+    int count = 0;
+    for (CommandItem item : incoming) {
+        item.builtin = false;                         // 导入的指令一律可改可删
+        if (item.commandId.isEmpty() || indexOfId(item.commandId) >= 0) {
+            item.commandId = makeUniqueId(item.commandId.isEmpty()
+                                              ? QStringLiteral("IMPORTED") : item.commandId);
+        }
+        m_items.append(item);
+        ++count;
+    }
+    if (count > 0) {
+        if (!save(errorMessage)) {
+            return -1;
+        }
+        emit changed();
+    }
+    return count;
+}
+
 const CommandItem *CommandLibrary::findById(const QString &commandId) const
 {
     const int idx = indexOfId(commandId);

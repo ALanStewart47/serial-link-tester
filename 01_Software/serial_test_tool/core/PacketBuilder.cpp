@@ -59,6 +59,56 @@ QByteArray fromAsciiText(const QString &text)
     return text.toLatin1();
 }
 
+QByteArray fromAsciiEscaped(const QString &text, bool *ok)
+{
+    QByteArray out;
+    out.reserve(text.size());
+    if (ok) {
+        *ok = true;
+    }
+    for (int i = 0; i < text.size(); ++i) {
+        const QChar c = text.at(i);
+        if (c != QLatin1Char('\\')) {
+            out.append(static_cast<char>(c.toLatin1()));
+            continue;
+        }
+        // 反斜杠转义
+        if (i + 1 >= text.size()) {
+            out.append('\\'); // 末尾孤立反斜杠，按字面处理
+            break;
+        }
+        const QChar n = text.at(++i);
+        switch (n.toLatin1()) {
+        case 'r': out.append('\r'); break;
+        case 'n': out.append('\n'); break;
+        case 't': out.append('\t'); break;
+        case '0': out.append('\0'); break;
+        case '\\': out.append('\\'); break;
+        case 'x': case 'X': {
+            if (i + 2 >= text.size()) {
+                if (ok) *ok = false;
+                return {};
+            }
+            bool byteOk = false;
+            const int v = text.mid(i + 1, 2).toInt(&byteOk, 16);
+            if (!byteOk) {
+                if (ok) *ok = false;
+                return {};
+            }
+            out.append(static_cast<char>(v));
+            i += 2;
+            break;
+        }
+        default:
+            // 未知转义：保留反斜杠和该字符的字面（宽容处理）
+            out.append('\\');
+            out.append(static_cast<char>(n.toLatin1()));
+            break;
+        }
+    }
+    return out;
+}
+
 quint8 bccXor(const QByteArray &data)
 {
     quint8 bcc = 0;

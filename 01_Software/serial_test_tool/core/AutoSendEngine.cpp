@@ -86,6 +86,7 @@ bool AutoSendEngine::start(const Config &config, QString *errorMessage)
 
     m_stats.reset();
     m_rxBuffer.clear();
+    m_lastReply.clear();
     m_inRound = false;
 
     setState(State::Running, QStringLiteral("运行中"));
@@ -193,6 +194,7 @@ void AutoSendEngine::resolveRound(bool received, bool matched, qint64 respMs)
     if (matched) {
         m_stats.recordMatch(respMs);
         outcome = Outcome::Match;
+        m_lastReply = m_rxBuffer;   // 记下最近成功回复，供界面显示
     } else if (received) {
         m_stats.recordMismatch();
         outcome = Outcome::Mismatch;

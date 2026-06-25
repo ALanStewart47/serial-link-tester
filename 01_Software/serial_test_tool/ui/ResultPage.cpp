@@ -3,6 +3,7 @@
 #include "core/CsvUtil.h"
 #include "core/PacketBuilder.h"
 #include "ui/RateBar.h"
+#include "ui/TrendChart.h"
 
 #include <QDateTime>
 #include <QFile>
@@ -66,6 +67,18 @@ void ResultPage::buildUi()
     barLayout->addWidget(m_successBar);
     root->addWidget(barGroup);
 
+    // 趋势曲线（每 0.3 秒采样一次累计值）
+    auto *trendGroup = new QGroupBox(QStringLiteral("趋势曲线（运行中每 0.3 秒采样）"), this);
+    auto *trendLayout = new QVBoxLayout(trendGroup);
+    m_respTrend = new TrendChart(QStringLiteral("累计平均响应时间"), QColor(0x42, 0x85, 0xF4),
+                                 QStringLiteral("ms"), trendGroup);
+    m_successTrend = new TrendChart(QStringLiteral("累计总成功率"), QColor(0x1a, 0x7f, 0x37),
+                                    QStringLiteral("%"), trendGroup);
+    m_successTrend->setFixedMax(100.0);
+    trendLayout->addWidget(m_respTrend);
+    trendLayout->addWidget(m_successTrend);
+    root->addWidget(trendGroup);
+
     root->addWidget(new QLabel(QStringLiteral("异常明细（仅记录失败轮：超时 / 回复错误）"), this));
     m_table = new QTableWidget(this);
     m_table->setColumnCount(4);
@@ -89,6 +102,8 @@ void ResultPage::onState(AutoSendEngine::State state, const QString &text)
     Q_UNUSED(text)
     if (state == AutoSendEngine::State::Running) {
         m_table->setRowCount(0); // 新一轮测试开始，清空上次明细
+        m_respTrend->clear();
+        m_successTrend->clear();
         m_refreshTimer->start();
     } else {
         m_refreshTimer->stop();
@@ -132,6 +147,12 @@ void ResultPage::refreshSummary()
     m_lossBar->setRate(s.lossRate() * 100.0);
     m_correctBar->setRate(correct < 0 ? -1.0 : correct * 100.0);
     m_successBar->setRate(s.successRate() * 100.0);
+
+    // 趋势采样：仅在运行中（刷新定时器活动时）追加点
+    if (m_refreshTimer->isActive()) {
+        m_respTrend->addSample(s.avgRespMs());
+        m_successTrend->addSample(s.successRate() * 100.0);
+    }
 }
 
 void ResultPage::clearAll()

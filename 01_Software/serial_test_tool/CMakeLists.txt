@@ -44,6 +44,8 @@ qt_add_executable(serial_test_tool
     ui/ResultPage.h
     ui/RateBar.cpp
     ui/RateBar.h
+    ui/TrendChart.cpp
+    ui/TrendChart.h
     ui/SettingsPage.cpp
     ui/SettingsPage.h
     resources/resources.qrc

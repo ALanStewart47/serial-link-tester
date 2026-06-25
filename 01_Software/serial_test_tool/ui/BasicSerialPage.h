@@ -1,5 +1,9 @@
 #pragma once
 
+#include <QByteArray>
+#include <QDateTime>
+#include <QString>
+#include <QVector>
 #include <QWidget>
 
 class SerialTransport;
@@ -31,13 +35,19 @@ private slots:
     void onPortStateChanged(bool open);
     void onOffline(const QString &reason);
     void onSendFormatChanged();
+    void rerenderMonitor();   // 显示格式/时间戳切换时，按原始记录整屏重渲染
 
 private:
     void buildUi();
     void appendMonitorLine(const QString &direction, const QByteArray &data);
+    QString formatRecord(const QString &direction, const QByteArray &data, const QDateTime &time) const;
     void updateControlState();
     void loadSettings();
     void saveSettings();
+
+    // 收发原始记录：保留最近 N 条，供切换显示格式时回溯重渲染。
+    struct MonitorRecord { QString dir; QByteArray data; QDateTime time; };
+    QVector<MonitorRecord> m_records;
 
     SerialTransport *m_transport = nullptr;
 

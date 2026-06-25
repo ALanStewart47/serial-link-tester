@@ -23,6 +23,11 @@ public:
     // 用内置默认库覆盖当前库与用户文件。
     bool restoreDefaults(QString *errorMessage = nullptr);
 
+    // 导出当前全部指令到任意 JSON 文件。
+    bool exportToFile(const QString &path, QString *errorMessage = nullptr) const;
+    // 从 JSON 文件导入并合并（导入项 builtin=false，ID 冲突自动改名）。返回导入条数，失败返回 -1。
+    int importFromFile(const QString &path, QString *errorMessage = nullptr);
+
     const QList<CommandItem> &items() const { return m_items; }
     const CommandItem *findById(const QString &commandId) const;
     QString userFilePath() const { return m_userFilePath; }

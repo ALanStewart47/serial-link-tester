@@ -3,6 +3,7 @@
 #include "core/AppConfig.h"
 #include "core/CommandItem.h"
 #include "core/CommandLibrary.h"
+#include "core/PacketBuilder.h"
 
 #include <QSettings>
 
@@ -113,6 +114,9 @@ void AutoSendPage::buildUi()
     m_countSpin->setGroupSeparatorShown(true);
     m_detectionCheck = new QCheckBox(QStringLiteral("启用检测"), paramGroup);
     m_detectionCheck->setChecked(true);
+    m_detectionCheck->setToolTip(QStringLiteral(
+        "勾选 = 一发一收检测：发一条→等回复/超时→再发下一条，统计丢包率/正确率（间隔含设备回复耗时）。\n"
+        "不勾 = 固定节拍压力发送：严格按间隔连发、不等回复，只统计发送次数（用于压测最高发送速率）。"));
     m_timeoutModeCombo = new QComboBox(paramGroup);
     m_timeoutModeCombo->addItem(QStringLiteral("自动超时（间隔×2）"), QStringLiteral("auto"));
     m_timeoutModeCombo->addItem(QStringLiteral("手动超时"), QStringLiteral("manual"));
@@ -150,6 +154,10 @@ void AutoSendPage::buildUi()
     m_progress->setValue(0);
     root->addWidget(m_progress);
 
+    m_etaLabel = new QLabel(QStringLiteral("剩余 - / 预计 -"), this);
+    m_etaLabel->setStyleSheet(QStringLiteral("color:#555;"));
+    root->addWidget(m_etaLabel);
+
     // —— 统计 ——
     auto *statGroup = new QGroupBox(QStringLiteral("实时统计"), this);
     auto *grid = new QGridLayout(statGroup);
@@ -170,6 +178,11 @@ void AutoSendPage::buildUi()
     m_statCorrect = makeStat(QStringLiteral("回复正确率"), 2, 1);
     m_statSuccess = makeStat(QStringLiteral("总成功率"), 2, 2);
     root->addWidget(statGroup);
+
+    m_lastReplyLabel = new QLabel(QStringLiteral("最近成功回复：-"), this);
+    m_lastReplyLabel->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    m_lastReplyLabel->setWordWrap(true);
+    root->addWidget(m_lastReplyLabel);
     root->addStretch(1);
 
     connect(m_commandCombo, &QComboBox::currentIndexChanged, this, &AutoSendPage::onCommandChanged);
@@ -249,6 +262,7 @@ void AutoSendPage::startTest()
         QMessageBox::warning(this, QStringLiteral("无法开始"), err);
         return;
     }
+    m_testTimer.start();
     m_refreshTimer->start();
 }
 
@@ -297,6 +311,25 @@ void AutoSendPage::refreshStats()
     m_statResp->setText(s.respText());
 
     const quint64 total = m_engine->totalCount();
-    const int pct = total > 0 ? static_cast<int>(s.sendCount() * 100 / total) : 0;
+    const quint64 sent = s.sendCount();
+    const int pct = total > 0 ? static_cast<int>(sent * 100 / total) : 0;
     m_progress->setValue(qBound(0, pct, 100));
+
+    // 剩余次数 / 预计完成时间（按已用时间和已发条数外推）
+    const quint64 remaining = total > sent ? total - sent : 0;
+    QString eta = QStringLiteral("-");
+    if (sent > 0 && remaining > 0) {
+        const double perMs = static_cast<double>(m_testTimer.elapsed()) / static_cast<double>(sent);
+        const double sec = remaining * perMs / 1000.0;
+        eta = sec >= 60 ? QStringLiteral("%1 分 %2 秒").arg(static_cast<int>(sec) / 60).arg(static_cast<int>(sec) % 60)
+                        : QStringLiteral("%1 秒").arg(sec, 0, 'f', 1);
+    }
+    m_etaLabel->setText(QStringLiteral("剩余 %1 次 / 预计还需 %2").arg(remaining).arg(eta));
+
+    // 最近一次成功回复
+    const QByteArray last = m_engine->lastReply();
+    m_lastReplyLabel->setText(last.isEmpty()
+        ? QStringLiteral("最近成功回复：-")
+        : QStringLiteral("最近成功回复：HEX %1 | ASCII %2")
+              .arg(PacketBuilder::toHexText(last), PacketBuilder::toAsciiText(last)));
 }

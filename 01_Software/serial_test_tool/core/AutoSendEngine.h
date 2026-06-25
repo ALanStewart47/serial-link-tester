@@ -40,6 +40,7 @@ public:
     const TestStatistics &statistics() const { return m_stats; }
     quint64 totalCount() const { return m_config.totalCount; }
     const Config &config() const { return m_config; }
+    QByteArray lastReply() const { return m_lastReply; } // 最近一次匹配成功收到的回复
 
     // 启动。失败（串口未开、指令非法等）返回 false 并填 errorMessage。
     bool start(const Config &config, QString *errorMessage);
@@ -77,6 +78,7 @@ private:
     int m_timeoutMs = 100;
 
     QByteArray m_rxBuffer;       // 当前轮累计接收
+    QByteArray m_lastReply;      // 最近一次匹配成功的回复（供界面显示）
     bool m_inRound = false;      // 当前是否处于"已发出、等回复"状态
     QElapsedTimer m_roundTimer;  // 测响应时间
 

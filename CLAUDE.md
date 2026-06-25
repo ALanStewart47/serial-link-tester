@@ -24,6 +24,7 @@
 | D-04 | 正确率：实时算 vs 事后算 | **后台线程实时计算**。 | 一次"发送内容==收到内容"的字节比较是微秒级，对发送节拍无影响。真正拖慢的是①每条都刷界面 ②每条都写 UI 文本框 ③全量日志同步落盘 —— 这些用「UI 限频刷新 + 界面只留最近 N 条 + 全量日志默认关且异步落盘」解决。 |
 | D-05 | 工程来源与工具链 | 从 `01_Software/reference/upper_upgrade` **拷贝改造**到 `01_Software/serial_test_tool`，保持 **Qt 6.5.3 + CMake + MinGW 64 位** 不变。 | 复用已验证的 `SerialTransport` 分层和构建配置，用户无需重建工程。 |
 | D-06 | 自动发送入口 | **独立第 3 页**：自动发送页有自己的指令下拉框（从指令库选一条），间隔/次数/启停/统计都在该页；指令库页保持纯管理。 | 结构清晰、两页低耦合，符合需求表 5 页规划。 |
+| D-08 | V1.1 功能增强（用户确认扩张范围） | 在第一版基础上加：①收发监视 HEX/ASCII 切换**回溯重渲染**（存原始记录）；②指令库**导入/导出 JSON**；③自动发送**剩余次数/预计完成时间**；④指令库页**单发**；⑤**最近成功回复**显示；⑥**响应/成功率趋势曲线**（自绘 TrendChart，不引图表库）；⑦**ASCII 发送转义** `\r\n\t\xNN`；⑧**固定节拍模式**经"启用检测"复选明确为压测模式（含 tooltip）。 | 用户明确要求。⑥原属需求表"第一版不做(图表曲线)"、⑧原属 D-03"后续版本"——经用户同意纳入；均不改已有统计/收发核心逻辑。 |
 | D-07 | 自动发送线程架构 | **UI 线程事件驱动**（修订原约束#4 的"工作线程"要求）。引擎用 QTimer + transport 信号驱动，不阻塞；统计在内存实时累加，界面按定时器(200ms)刷新快照。 | ping-pong 是事件驱动而非死循环，发送/匹配是微秒级操作，UI 线程不会被阻塞；避免 QSerialPort 跨线程隐患；对第一次写桌面软件最简单最安全。间隔1ms~5S、千万次均可胜任。**已知代价**：UI 被拖窗/弹框瞬间阻塞时发送会延后几毫秒——属可接受。工作线程化列为后续硬化项。 |
 
 ---
@@ -218,8 +219,18 @@ auto_timeout_ms = clamp(send_interval_ms * 2, 10, 5000)
   - 真 bug：#1 PacketBuilder 用 ASCII 范围判断替换 `isxdigit(toLatin1())` 的 UB；#3 `~LogManager` 中断时补写 summary；#4 CommandLibrary 首次 save 失败上报；#5 LogWriter 缓存改 per-instance + 每会话 `closeFile` 释放句柄；#6 `recordSend()` 移到 `send()` 成功之后。
   - 清理：#7 比率格式化收敛到 `TestStatistics::lossRateText/correctRateText/successRateText/respText`；#10 CSV 转义抽到 `core/CsvUtil.h`（含换行）；#9 Tab 运行锁定改用页面指针(m_autoPage/m_resultPage)不依赖下标；#8 全量日志开关唯一来源=QSettings，`LogManager::beginSession` 时读取（移除 setFullLogEnabled 缓存），与引擎 start 时读取同源。
   - 已知/可接受：#2 ping-pong 无序号关联（仅设备回复接近超时时显现，属设计边界，未改）。
+- **V1.1 功能增强已完成（编译通过，待功能验证，决策 D-08）**：
+  - 收发监视切换显示格式/时间戳→回溯重渲染（BasicSerialPage 存 `m_records`，`rerenderMonitor`）。
+  - 指令库导入/导出 JSON（`CommandLibrary::exportToFile/importFromFile` + 页面按钮）；指令库页"单发"按钮（注入 `SerialTransport`）。
+  - 自动发送页：剩余次数 + ETA（`m_testTimer` 外推）、最近成功回复显示（引擎 `lastReply()`）。
+  - 结果页趋势曲线：`ui/TrendChart`（自绘折线，不引 Qt Charts），累计平均响应(ms)+累计成功率(%)，运行中每 300ms 采样。
+  - `PacketBuilder::fromAsciiEscaped`（`\r \n \t \0 \\ \xNN`）用于手动 ASCII 发送与指令库单发。
+  - 固定节拍：经"启用检测"复选 + tooltip 明确为"不等回复、按间隔压测"模式（引擎 tickFixedRate 早已支持）。
 - **文档**：已出 `00_Doc/代码导读与CppQt实战指南.html`（面向只懂 C 的单片机工程师：工程结构/各模块逐讲/信号槽/C→C++Qt 学习路线/练习）。
-- **后续可选项**：长稳压力测试收尾、暂缓验收项（配置记忆重启/拔串口/关检测固定节拍）的回归。
+- **打包（绿色版/免安装，已产出）**：`01_Software/dist/serial_test_tool/`（exe + Qt DLL + 平台插件 + MinGW 运行时 + 使用说明.txt），压缩包 `01_Software/dist/serial_test_tool_v1.0_win64.zip`（约 21.7MB）。
+  - 步骤：① `cmake -B build-release -DCMAKE_BUILD_TYPE=Release` 编译 Release；② 拷 exe 到独立目录；③ `windeployqt --compiler-runtime --no-translations <exe>`；④ Compress-Archive 打 zip。
+  - **坑（重要）**：windeployqt 在 MinGW 下会把插件误判为 debug，**不要传 `--release`**（否则报 "Unable to find the platform plugin"）；让它自动匹配即可。PATH 里只放 6.5.3 的 bin，避免与其它 Qt(6.10.1) 冲突。
+- **后续可选项**：长稳压力测试收尾、暂缓验收项（配置记忆重启/拔串口/关检测固定节拍）的回归；如需面向普通用户可再用 Inno Setup 套安装包。
 - **S5 实现**：
   - `core/AppConfig.h`：QSettings 的 org/app + 全部配置键（独立于指令库 AppDataLocation）。
   - `core/LogManager`（+内部 `LogWriter`）：**唯一的工作线程**——日志文件 IO 在后台线程，UI 线程缓存行、300ms 成批投递（NFR-004/006/407）。统计汇总 `summary.csv` + 异常 `exception_*.csv` 默认写；全量 `full_*.csv` 仅勾选时每轮写。CSV 字段转义。
@@ -261,6 +272,8 @@ auto_timeout_ms = clamp(send_interval_ms * 2, 10, 5000)
 
 | 日期 | 阶段 | 改动摘要 |
 |---|---|---|
+| 2026-06-05 | 打包 | 产出绿色版 `dist/serial_test_tool/`（windeployqt 收依赖+使用说明）与 zip(21.7MB)。Release 编译。记录 windeployqt+MinGW 不可传 --release 的坑。 |
+| 2026-06-05 | V1.1 增强 | 按用户要求加 8 项(D-08)：监视回溯重渲染、指令库导入导出、ETA/剩余、单发、最近成功回复、趋势曲线(TrendChart 自绘)、ASCII 转义(\r\n\t\xNN)、固定节拍模式明确化。编译通过，待功能验证。 |
 | 2026-06-05 | 文档 | 输出 `00_Doc/代码导读与CppQt实战指南.html`（面向 C/单片机工程师的代码导读 + C++/Qt 针对性学习路线，单文件 HTML）。 |
 | 2026-06-05 | code-review 修复 | 修真 bug #1(isxdigit UB)/#3(中断写summary)/#4(首次save检查)/#5(日志句柄per-instance+按会话关闭)/#6(recordSend顺序);清理 #7(比率文本helper)/#8(全量日志单一来源)/#9(Tab锁定用页指针)/#10(CsvUtil共享转义)。编译通过。 |
 | 2026-06-05 | S5 验收 | S5 核心验收通过：summary/exception/full 日志落盘、结果页导出 CSV(WPS 打开正常)。第一版功能全部完成。配置记忆重启恢复与长稳压力测试由用户后续验证。 |

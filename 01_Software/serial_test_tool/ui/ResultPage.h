@@ -9,6 +9,7 @@ class QTableWidget;
 class QTimer;
 class QPushButton;
 class RateBar;
+class TrendChart;
 
 // Page 4：测试结果与日志页（需求 FR-311 异常明细 + 结果汇总）。
 // 顶部显示最终/实时汇总；中部错误明细表（只记失败轮：超时/回复错误）；
@@ -37,6 +38,8 @@ private:
     RateBar *m_lossBar = nullptr;
     RateBar *m_correctBar = nullptr;
     RateBar *m_successBar = nullptr;
+    TrendChart *m_respTrend = nullptr;
+    TrendChart *m_successTrend = nullptr;
     QTableWidget *m_table = nullptr;
     QPushButton *m_clearButton = nullptr;
     QPushButton *m_exportButton = nullptr;

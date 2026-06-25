@@ -36,7 +36,7 @@ void MainWindow::buildUi()
 
     m_tabs = new QTabWidget(this);
     m_tabs->addTab(new BasicSerialPage(&m_transport, m_tabs), QStringLiteral("串口收发"));
-    m_tabs->addTab(new CommandLibraryPage(&m_library, m_tabs), QStringLiteral("指令库"));
+    m_tabs->addTab(new CommandLibraryPage(&m_library, &m_transport, m_tabs), QStringLiteral("指令库"));
     auto *autoPage = new AutoSendPage(&m_library, &m_engine, m_tabs);
     m_autoPage = autoPage;
     m_resultPage = new ResultPage(&m_engine, m_tabs);

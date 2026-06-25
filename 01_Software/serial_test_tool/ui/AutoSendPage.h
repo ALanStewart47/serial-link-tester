@@ -2,6 +2,7 @@
 
 #include "core/AutoSendEngine.h"
 
+#include <QElapsedTimer>
 #include <QWidget>
 
 class CommandLibrary;
@@ -58,6 +59,9 @@ private:
 
     QLabel *m_stateLabel = nullptr;
     QProgressBar *m_progress = nullptr;
+    QLabel *m_etaLabel = nullptr;        // 剩余次数 / 预计完成时间
+    QLabel *m_lastReplyLabel = nullptr;  // 最近一次成功回复
+    QElapsedTimer m_testTimer;           // 测试计时，用于估算 ETA
     QLabel *m_statSent = nullptr;
     QLabel *m_statRecv = nullptr;
     QLabel *m_statMatch = nullptr;

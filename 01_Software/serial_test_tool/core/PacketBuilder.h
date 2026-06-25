@@ -14,6 +14,10 @@ QByteArray fromHexText(const QString &text, bool *ok = nullptr);
 // 把 ASCII 文本按 Latin1 字节发送（串口协议通常是单字节字符）。
 QByteArray fromAsciiText(const QString &text);
 
+// 带转义的 ASCII 解析：支持 \r \n \t \0 \\ 以及 \xNN（两位十六进制）。
+// 用于“发送内容”需要带回车换行/控制字符的场景。非法 \x 时 ok=false。
+QByteArray fromAsciiEscaped(const QString &text, bool *ok = nullptr);
+
 // 逐字节异或校验。
 quint8 bccXor(const QByteArray &data);
 

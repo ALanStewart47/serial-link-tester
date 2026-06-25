@@ -17,6 +17,8 @@
 #include <QPlainTextEdit>
 #include <QPushButton>
 #include <QSerialPortInfo>
+#include <QStringList>
+#include <QTextCursor>
 #include <QVBoxLayout>
 
 namespace {
@@ -42,6 +44,9 @@ BasicSerialPage::BasicSerialPage(SerialTransport *transport, QWidget *parent)
     connect(m_stopBitsCombo, &QComboBox::currentIndexChanged, this, &BasicSerialPage::saveSettings);
     connect(m_displayFormatCombo, &QComboBox::currentIndexChanged, this, &BasicSerialPage::saveSettings);
     connect(m_timestampCheck, &QCheckBox::toggled, this, &BasicSerialPage::saveSettings);
+    // 显示格式 / 时间戳切换 → 按原始记录整屏重渲染（不再只影响新数据）
+    connect(m_displayFormatCombo, &QComboBox::currentIndexChanged, this, &BasicSerialPage::rerenderMonitor);
+    connect(m_timestampCheck, &QCheckBox::toggled, this, &BasicSerialPage::rerenderMonitor);
     connect(m_sendFormatCombo, &QComboBox::currentIndexChanged, this, &BasicSerialPage::saveSettings);
     connect(m_bccCheck, &QCheckBox::toggled, this, &BasicSerialPage::saveSettings);
 
@@ -130,7 +135,7 @@ void BasicSerialPage::buildUi()
     auto *sendGroup = new QGroupBox(QStringLiteral("手动发送"), this);
     auto *sendLayout = new QHBoxLayout(sendGroup);
     m_sendEdit = new QLineEdit(sendGroup);
-    m_sendEdit->setPlaceholderText(QStringLiteral("HEX 例：CA 01 01 00 FF    ASCII 例：CST#"));
+    m_sendEdit->setPlaceholderText(QStringLiteral("HEX 例：CA 01 01 00 FF    ASCII 例：CST#（支持转义 \\r \\n \\t \\xNN）"));
     m_sendFormatCombo = new QComboBox(sendGroup);
     m_sendFormatCombo->addItem(QStringLiteral("HEX 发送"), QStringLiteral("hex"));
     m_sendFormatCombo->addItem(QStringLiteral("ASCII 发送"), QStringLiteral("ascii"));
@@ -229,7 +234,13 @@ void BasicSerialPage::sendManual()
             payload = PacketBuilder::appendBcc(payload);
         }
     } else {
-        payload = PacketBuilder::fromAsciiText(text);
+        bool ok = false;
+        payload = PacketBuilder::fromAsciiEscaped(text, &ok);
+        if (!ok) {
+            QMessageBox::warning(this, QStringLiteral("转义格式错误"),
+                                 QStringLiteral("\\x 后需跟两位十六进制，例如 \\x0D。"));
+            return;
+        }
     }
 
     QString error;
@@ -242,6 +253,7 @@ void BasicSerialPage::sendManual()
 
 void BasicSerialPage::clearMonitor()
 {
+    m_records.clear();
     m_monitor->clear();
 }
 
@@ -271,18 +283,39 @@ void BasicSerialPage::onSendFormatChanged()
     }
 }
 
-void BasicSerialPage::appendMonitorLine(const QString &direction, const QByteArray &data)
+QString BasicSerialPage::formatRecord(const QString &direction, const QByteArray &data,
+                                      const QDateTime &time) const
 {
     const bool hexDisplay = m_displayFormatCombo->currentData().toString() == QStringLiteral("hex");
     const QString body = hexDisplay ? PacketBuilder::toHexText(data) : PacketBuilder::toAsciiText(data);
-
     QString line;
     if (m_timestampCheck->isChecked()) {
-        line += QStringLiteral("[%1] ")
-                    .arg(QDateTime::currentDateTime().toString(QStringLiteral("HH:mm:ss.zzz")));
+        line += QStringLiteral("[%1] ").arg(time.toString(QStringLiteral("HH:mm:ss.zzz")));
     }
     line += QStringLiteral("%1 %2").arg(direction, body);
-    m_monitor->appendPlainText(line);
+    return line;
+}
+
+void BasicSerialPage::appendMonitorLine(const QString &direction, const QByteArray &data)
+{
+    const QDateTime now = QDateTime::currentDateTime();
+    // 保存原始字节记录（限最近 N 条），用于切换显示格式时整屏重渲染。
+    m_records.append({direction, data, now});
+    if (m_records.size() > kMaxMonitorBlocks) {
+        m_records.remove(0, m_records.size() - kMaxMonitorBlocks);
+    }
+    m_monitor->appendPlainText(formatRecord(direction, data, now));
+}
+
+void BasicSerialPage::rerenderMonitor()
+{
+    QStringList lines;
+    lines.reserve(m_records.size());
+    for (const MonitorRecord &r : m_records) {
+        lines << formatRecord(r.dir, r.data, r.time);
+    }
+    m_monitor->setPlainText(lines.join(QLatin1Char('\n')));
+    m_monitor->moveCursor(QTextCursor::End);
 }
 
 void BasicSerialPage::loadSettings()
