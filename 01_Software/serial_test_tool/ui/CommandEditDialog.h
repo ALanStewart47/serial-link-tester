@@ -2,15 +2,14 @@
 
 #include "core/CommandItem.h"
 
+#include <QByteArray>
 #include <QDialog>
 
 class QCheckBox;
 class QComboBox;
 class QLineEdit;
-class QPlainTextEdit;
-class QSpinBox;
+class QPushButton;
 
-// 新增/编辑/复制 一条指令的对话框。
 class CommandEditDialog : public QDialog
 {
     Q_OBJECT
@@ -20,12 +19,13 @@ public:
 
     void setItem(const CommandItem &item);
     CommandItem item() const;
+    void setLastRx(const QByteArray &rx);
 
-    // command_id 是主键：编辑现有指令时不可改；新增/复制时可改。
     void setIdEditable(bool editable);
 
 private slots:
     void validateAndAccept();
+    void fillReplyFromLastRx();
 
 private:
     QLineEdit *m_id = nullptr;
@@ -37,11 +37,13 @@ private:
     QCheckBox *m_bcc = nullptr;
     QComboBox *m_replyFormat = nullptr;
     QLineEdit *m_reply = nullptr;
-    QComboBox *m_timeoutMode = nullptr;
-    QSpinBox *m_timeoutMs = nullptr;
+    QPushButton *m_fillReplyButton = nullptr;
     QLineEdit *m_description = nullptr;
     QCheckBox *m_enabled = nullptr;
     QLineEdit *m_remark = nullptr;
 
-    bool m_builtin = false; // 保留原 builtin 标记，编辑时透传
+    bool m_builtin = false;
+    QString m_timeoutMode = QStringLiteral("auto");
+    int m_timeoutMs = 100;
+    QByteArray m_lastRx;
 };

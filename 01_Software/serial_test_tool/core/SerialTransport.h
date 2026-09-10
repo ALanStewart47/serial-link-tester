@@ -24,12 +24,20 @@ public:
     void close();
     bool isOpen() const;
     QString portName() const;
+    qint32 baudRate() const;
+    QSerialPort::DataBits dataBits() const;
+    QSerialPort::Parity parity() const;
+    QSerialPort::StopBits stopBits() const;
+    // 例如 "115200 8N1"，供测试报告表头。
+    QString paramsText() const;
+    QByteArray lastRx() const { return m_lastRx; }
 
     // 发送裸字节。失败返回 false 并填充 errorMessage。
     bool send(const QByteArray &data, QString *errorMessage = nullptr);
 
 signals:
     void bytesReceived(const QByteArray &data); // 收到的原始字节流
+    void bytesSent(const QByteArray &data);     // 实际写出的字节（手动/自动/单发共用）
     void logMessage(const QString &message);    // 面向用户的中文日志
     void offline(const QString &reason);        // 设备掉线/被拔出
     void portStateChanged(bool open);
@@ -40,4 +48,5 @@ private slots:
 
 private:
     QSerialPort m_serial;
+    QByteArray m_lastRx;
 };

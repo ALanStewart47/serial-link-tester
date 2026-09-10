@@ -16,6 +16,7 @@ namespace Key {
 constexpr auto LogDir        = "log/dir";
 constexpr auto FullLog       = "log/fullEnabled";
 
+constexpr auto PortName      = "serial/portName";
 constexpr auto Baud          = "serial/baud";
 constexpr auto DataBits      = "serial/dataBits";
 constexpr auto Parity        = "serial/parity";
@@ -31,6 +32,12 @@ constexpr auto AutoDetection = "auto/detection";
 constexpr auto AutoTimeoutMode = "auto/timeoutMode"; // 0 auto 1 manual
 constexpr auto AutoTimeoutMs = "auto/timeoutMs";
 constexpr auto AutoCommandId = "auto/commandId";
+constexpr auto AutoRecentIds = "auto/recentIds";
+constexpr auto AutoFavoriteIds = "auto/favoriteIds";
+constexpr auto AutoStopMode  = "auto/stopMode";      // 0 count 1 duration
+constexpr auto AutoDurationMs = "auto/durationMs";
+constexpr auto PassMinSuccess = "auto/passMinSuccess"; // percent, default 99
+constexpr auto PassMaxLoss   = "auto/passMaxLoss";     // percent, default 1
 } // namespace Key
 
 } // namespace AppConfig

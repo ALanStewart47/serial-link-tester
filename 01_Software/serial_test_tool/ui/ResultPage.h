@@ -11,9 +11,6 @@ class QPushButton;
 class RateBar;
 class TrendChart;
 
-// Page 4：测试结果与日志页（需求 FR-311 异常明细 + 结果汇总）。
-// 顶部显示最终/实时汇总；中部错误明细表（只记失败轮：超时/回复错误）；
-// 全量收发日志与导出在 S5 实现，本页先做异常明细与汇总。
 class ResultPage : public QWidget
 {
     Q_OBJECT
@@ -27,14 +24,17 @@ private slots:
     void refreshSummary();
     void clearAll();
     void exportDetails();
+    void openLogDir();
 
 private:
     void buildUi();
+    void updateVerdictLabel();
 
     AutoSendEngine *m_engine = nullptr;
     QTimer *m_refreshTimer = nullptr;
 
     QLabel *m_summary = nullptr;
+    QLabel *m_verdictLabel = nullptr;
     RateBar *m_lossBar = nullptr;
     RateBar *m_correctBar = nullptr;
     RateBar *m_successBar = nullptr;
@@ -43,4 +43,5 @@ private:
     QTableWidget *m_table = nullptr;
     QPushButton *m_clearButton = nullptr;
     QPushButton *m_exportButton = nullptr;
+    QPushButton *m_openLogButton = nullptr;
 };

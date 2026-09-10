@@ -3,6 +3,7 @@
 #include "ui/AutoSendPage.h"
 #include "ui/BasicSerialPage.h"
 #include "ui/CommandLibraryPage.h"
+#include "ui/PortConnectionBar.h"
 #include "ui/ResultPage.h"
 #include "ui/SettingsPage.h"
 
@@ -32,22 +33,31 @@ MainWindow::MainWindow(QWidget *parent)
 void MainWindow::buildUi()
 {
     setWindowTitle(QStringLiteral("串口测试工具"));
-    resize(1000, 680);
+    resize(1100, 760);
 
-    m_tabs = new QTabWidget(this);
-    m_tabs->addTab(new BasicSerialPage(&m_transport, m_tabs), QStringLiteral("串口收发"));
+    auto *central = new QWidget(this);
+    auto *layout = new QVBoxLayout(central);
+    layout->setContentsMargins(0, 0, 0, 0);
+    layout->setSpacing(0);
+
+    m_portBar = new PortConnectionBar(&m_transport, central);
+    layout->addWidget(m_portBar);
+
+    m_tabs = new QTabWidget(central);
+    m_serialPage = new BasicSerialPage(&m_transport, m_tabs);
+    m_tabs->addTab(m_serialPage, QStringLiteral("串口收发"));
     m_tabs->addTab(new CommandLibraryPage(&m_library, &m_transport, m_tabs), QStringLiteral("指令库"));
-    auto *autoPage = new AutoSendPage(&m_library, &m_engine, m_tabs);
+    auto *autoPage = new AutoSendPage(&m_library, &m_engine, &m_transport, m_tabs);
     m_autoPage = autoPage;
     m_resultPage = new ResultPage(&m_engine, m_tabs);
     m_tabs->addTab(autoPage, QStringLiteral("自动发送"));
     m_tabs->addTab(m_resultPage, QStringLiteral("结果与日志"));
     m_tabs->addTab(new SettingsPage(&m_log, m_tabs), QStringLiteral("设置"));
-    setCentralWidget(m_tabs);
+    layout->addWidget(m_tabs, 1);
+    setCentralWidget(central);
 
     connect(autoPage, &AutoSendPage::runningChanged, this, &MainWindow::onAutoRunningChanged);
 
-    // 引擎 ↔ 日志
     connect(&m_engine, &AutoSendEngine::stateChanged, this, &MainWindow::onEngineStateForLog);
     connect(&m_engine, &AutoSendEngine::roundCompleted, this,
             [this](quint64 idx, AutoSendEngine::Outcome o, qint64 ms, const QByteArray &a) {
@@ -66,7 +76,7 @@ void MainWindow::buildUi()
 void MainWindow::onPortStateChanged(bool open)
 {
     m_portStatusLabel->setText(open
-        ? QStringLiteral("串口状态：已打开 (%1)").arg(m_transport.portName())
+        ? QStringLiteral("串口状态：已打开（%1）").arg(m_transport.paramsText())
         : QStringLiteral("串口状态：已关闭"));
 }
 
@@ -94,12 +104,12 @@ void MainWindow::onEngineStateForLog(AutoSendEngine::State state, const QString 
 
 void MainWindow::onAutoRunningChanged(bool running)
 {
-    // 自动测试运行期间锁定会改参数的页（串口收发/指令库/设置），防止误操作（FR-208）。
-    // 保留：自动发送页本身 + 结果与日志页（只读，便于实时观察）。用页面指针判断，
-    // 不依赖 addTab 顺序，重排标签也不会锁错页。
+    // 运行中锁指令库/设置，保留串口收发（只看监视）、自动发送、结果页。
+    m_portBar->setTestRunning(running);
+    m_serialPage->setTestRunning(running);
     for (int i = 0; i < m_tabs->count(); ++i) {
         QWidget *page = m_tabs->widget(i);
-        const bool keepEnabled = (page == m_autoPage || page == m_resultPage);
+        const bool keepEnabled = (page == m_autoPage || page == m_resultPage || page == m_serialPage);
         m_tabs->setTabEnabled(i, !running || keepEnabled);
     }
 }

@@ -32,6 +32,7 @@ private slots:
     void importLibrary();
     void exportLibrary();
     void sendOnce();
+    void fillExpectedFromLastRx();
 
 private:
     void buildUi();
@@ -44,6 +45,7 @@ private:
     QLineEdit *m_searchEdit = nullptr;
     QTreeWidget *m_tree = nullptr;
     QPushButton *m_sendButton = nullptr;
+    QPushButton *m_fillExpectedButton = nullptr;
     QPushButton *m_addButton = nullptr;
     QPushButton *m_copyButton = nullptr;
     QPushButton *m_editButton = nullptr;

@@ -7,6 +7,8 @@
 
 #include <QMainWindow>
 
+class BasicSerialPage;
+class PortConnectionBar;
 class QLabel;
 class QTabWidget;
 
@@ -26,12 +28,14 @@ private slots:
 private:
     void buildUi();
 
-    SerialTransport m_transport;        // 全局唯一串口对象，各页共用
-    CommandLibrary m_library;           // 全局唯一指令库，各页共用
-    AutoSendEngine m_engine{&m_transport}; // 自动发送引擎（用同一个串口）
-    LogManager m_log;                      // 异步日志
+    SerialTransport m_transport;
+    CommandLibrary m_library;
+    AutoSendEngine m_engine{&m_transport};
+    LogManager m_log;
+    PortConnectionBar *m_portBar = nullptr;
     QTabWidget *m_tabs = nullptr;
-    QWidget *m_autoPage = nullptr;         // 运行期保持可用的页（自动发送）
-    QWidget *m_resultPage = nullptr;       // 运行期保持可用的页（结果只读）
+    BasicSerialPage *m_serialPage = nullptr;
+    QWidget *m_autoPage = nullptr;
+    QWidget *m_resultPage = nullptr;
     QLabel *m_portStatusLabel = nullptr;
 };

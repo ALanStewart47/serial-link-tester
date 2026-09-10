@@ -13,6 +13,8 @@
 #include <QLineEdit>
 #include <QPushButton>
 #include <QSettings>
+#include <QShowEvent>
+#include <QSignalBlocker>
 #include <QStandardPaths>
 #include <QUrl>
 #include <QVBoxLayout>
@@ -40,6 +42,18 @@ SettingsPage::SettingsPage(LogManager *log, QWidget *parent)
 
     connect(m_dirEdit, &QLineEdit::editingFinished, this, &SettingsPage::onDirChanged);
     connect(m_fullLogCheck, &QCheckBox::toggled, this, &SettingsPage::onFullLogToggled);
+}
+
+void SettingsPage::showEvent(QShowEvent *event)
+{
+    QWidget::showEvent(event);
+    QSettings s(AppConfig::Org(), AppConfig::App());
+    const QString dir = s.value(AppConfig::Key::LogDir, defaultLogDir()).toString();
+    const bool full = s.value(AppConfig::Key::FullLog, false).toBool();
+    const QSignalBlocker blocker(m_fullLogCheck);
+    m_dirEdit->setText(dir);
+    m_fullLogCheck->setChecked(full);
+    m_log->setLogDir(dir);
 }
 
 void SettingsPage::buildUi()

@@ -47,7 +47,16 @@ bool AutoSendEngine::start(const Config &config, QString *errorMessage)
         if (errorMessage) *errorMessage = QStringLiteral("请先打开串口");
         return false;
     }
-    if (config.totalCount == 0) {
+    if (config.stopMode == Config::StopMode::Duration) {
+        if (config.durationMs < 1000) {
+            if (errorMessage) *errorMessage = QStringLiteral("测试时长必须 ≥ 1 秒");
+            return false;
+        }
+        if (config.durationMs > 48 * 3600 * 1000) {
+            if (errorMessage) *errorMessage = QStringLiteral("测试时长必须 ≤ 48 小时");
+            return false;
+        }
+    } else if (config.totalCount == 0) {
         if (errorMessage) *errorMessage = QStringLiteral("发送次数必须 ≥ 1");
         return false;
     }
@@ -83,11 +92,13 @@ bool AutoSendEngine::start(const Config &config, QString *errorMessage)
     m_timeoutMs = (config.command.timeoutMode == QStringLiteral("manual"))
                       ? qBound(10, config.command.timeoutMs, 5000)
                       : autoTimeout(config.intervalMs);
+    m_config.timeoutMsUsed = m_timeoutMs;
 
     m_stats.reset();
     m_rxBuffer.clear();
     m_lastReply.clear();
     m_inRound = false;
+    m_runTimer.start();
 
     setState(State::Running, QStringLiteral("运行中"));
 
@@ -121,6 +132,10 @@ void AutoSendEngine::beginRound()
     if (m_state != State::Running) {
         return;
     }
+    if (reachedStop() && m_stats.sendCount() > 0) {
+        finishNaturally();
+        return;
+    }
     m_rxBuffer.clear();
     m_roundTimer.restart();
 
@@ -140,7 +155,7 @@ void AutoSendEngine::tickFixedRate()
     if (m_state != State::Running) {
         return;
     }
-    if (m_stats.sendCount() >= m_config.totalCount) {
+    if (reachedStop() && m_stats.sendCount() > 0) {
         finishNaturally();
         return;
     }
@@ -154,7 +169,7 @@ void AutoSendEngine::tickFixedRate()
         emit roundCompleted(m_stats.sendCount(), Outcome::SentOnly, -1, QByteArray());
     }
     emit roundResolved();
-    if (m_stats.sendCount() >= m_config.totalCount) {
+    if (reachedStop()) {
         finishNaturally();
     } else {
         m_paceTimer->start(m_config.intervalMs);
@@ -209,7 +224,7 @@ void AutoSendEngine::resolveRound(bool received, bool matched, qint64 respMs)
     }
     emit roundResolved();
 
-    if (m_stats.sendCount() >= m_config.totalCount) {
+    if (reachedStop()) {
         finishNaturally();
         return;
     }
@@ -224,6 +239,14 @@ void AutoSendEngine::finishNaturally()
     m_inRound = false;
     setState(State::Finished, QStringLiteral("已完成"));
     emit finished();
+}
+
+bool AutoSendEngine::reachedStop() const
+{
+    if (m_config.stopMode == Config::StopMode::Duration) {
+        return m_runTimer.isValid() && m_runTimer.elapsed() >= m_config.durationMs;
+    }
+    return m_stats.sendCount() >= m_config.totalCount;
 }
 
 void AutoSendEngine::setState(State state, const QString &text)

@@ -4,8 +4,6 @@
 #include "core/PacketBuilder.h"
 #include "core/SerialTransport.h"
 
-#include <QSettings>
-
 #include <QCheckBox>
 #include <QComboBox>
 #include <QDateTime>
@@ -16,13 +14,12 @@
 #include <QMessageBox>
 #include <QPlainTextEdit>
 #include <QPushButton>
-#include <QSerialPortInfo>
-#include <QStringList>
+#include <QSettings>
 #include <QTextCursor>
 #include <QVBoxLayout>
 
 namespace {
-constexpr int kMaxMonitorBlocks = 1000; // 界面只保留最近 N 条（需求 FR-406）
+constexpr int kMaxMonitorBlocks = 1000;
 }
 
 BasicSerialPage::BasicSerialPage(SerialTransport *transport, QWidget *parent)
@@ -30,26 +27,26 @@ BasicSerialPage::BasicSerialPage(SerialTransport *transport, QWidget *parent)
     , m_transport(transport)
 {
     buildUi();
-    refreshPorts();
     loadSettings();
 
     connect(m_transport, &SerialTransport::bytesReceived, this, &BasicSerialPage::onBytesReceived);
+    connect(m_transport, &SerialTransport::bytesSent, this, &BasicSerialPage::onBytesSent);
     connect(m_transport, &SerialTransport::portStateChanged, this, &BasicSerialPage::onPortStateChanged);
     connect(m_transport, &SerialTransport::offline, this, &BasicSerialPage::onOffline);
 
-    // 配置变化即记忆
-    connect(m_baudCombo, &QComboBox::currentTextChanged, this, &BasicSerialPage::saveSettings);
-    connect(m_dataBitsCombo, &QComboBox::currentIndexChanged, this, &BasicSerialPage::saveSettings);
-    connect(m_parityCombo, &QComboBox::currentIndexChanged, this, &BasicSerialPage::saveSettings);
-    connect(m_stopBitsCombo, &QComboBox::currentIndexChanged, this, &BasicSerialPage::saveSettings);
     connect(m_displayFormatCombo, &QComboBox::currentIndexChanged, this, &BasicSerialPage::saveSettings);
     connect(m_timestampCheck, &QCheckBox::toggled, this, &BasicSerialPage::saveSettings);
-    // 显示格式 / 时间戳切换 → 按原始记录整屏重渲染（不再只影响新数据）
     connect(m_displayFormatCombo, &QComboBox::currentIndexChanged, this, &BasicSerialPage::rerenderMonitor);
     connect(m_timestampCheck, &QCheckBox::toggled, this, &BasicSerialPage::rerenderMonitor);
     connect(m_sendFormatCombo, &QComboBox::currentIndexChanged, this, &BasicSerialPage::saveSettings);
     connect(m_bccCheck, &QCheckBox::toggled, this, &BasicSerialPage::saveSettings);
 
+    updateControlState();
+}
+
+void BasicSerialPage::setTestRunning(bool running)
+{
+    m_testRunning = running;
     updateControlState();
 }
 
@@ -59,54 +56,6 @@ void BasicSerialPage::buildUi()
     root->setContentsMargins(10, 10, 10, 10);
     root->setSpacing(8);
 
-    // —— 串口连接组 ——
-    auto *connGroup = new QGroupBox(QStringLiteral("串口连接"), this);
-    auto *connLayout = new QHBoxLayout(connGroup);
-
-    m_portCombo = new QComboBox(connGroup);
-    m_portCombo->setMinimumWidth(160);
-    m_refreshButton = new QPushButton(QStringLiteral("刷新"), connGroup);
-
-    m_baudCombo = new QComboBox(connGroup);
-    const QList<int> baudRates = {4800, 9600, 14400, 19200, 28800, 38400, 57600, 115200};
-    for (int baud : baudRates) {
-        m_baudCombo->addItem(QString::number(baud), baud);
-    }
-    m_baudCombo->setEditable(true);
-    m_baudCombo->setCurrentIndex(m_baudCombo->findData(115200));
-
-    m_dataBitsCombo = new QComboBox(connGroup);
-    m_dataBitsCombo->addItem(QStringLiteral("8"), QSerialPort::Data8);
-    m_dataBitsCombo->addItem(QStringLiteral("7"), QSerialPort::Data7);
-    m_dataBitsCombo->addItem(QStringLiteral("6"), QSerialPort::Data6);
-    m_dataBitsCombo->addItem(QStringLiteral("5"), QSerialPort::Data5);
-
-    m_parityCombo = new QComboBox(connGroup);
-    m_parityCombo->addItem(QStringLiteral("无"), QSerialPort::NoParity);
-    m_parityCombo->addItem(QStringLiteral("偶"), QSerialPort::EvenParity);
-    m_parityCombo->addItem(QStringLiteral("奇"), QSerialPort::OddParity);
-
-    m_stopBitsCombo = new QComboBox(connGroup);
-    m_stopBitsCombo->addItem(QStringLiteral("1"), QSerialPort::OneStop);
-    m_stopBitsCombo->addItem(QStringLiteral("2"), QSerialPort::TwoStop);
-
-    m_openButton = new QPushButton(QStringLiteral("打开串口"), connGroup);
-
-    connLayout->addWidget(new QLabel(QStringLiteral("串口"), connGroup));
-    connLayout->addWidget(m_portCombo, 1);
-    connLayout->addWidget(m_refreshButton);
-    connLayout->addWidget(new QLabel(QStringLiteral("波特率"), connGroup));
-    connLayout->addWidget(m_baudCombo);
-    connLayout->addWidget(new QLabel(QStringLiteral("数据位"), connGroup));
-    connLayout->addWidget(m_dataBitsCombo);
-    connLayout->addWidget(new QLabel(QStringLiteral("校验"), connGroup));
-    connLayout->addWidget(m_parityCombo);
-    connLayout->addWidget(new QLabel(QStringLiteral("停止位"), connGroup));
-    connLayout->addWidget(m_stopBitsCombo);
-    connLayout->addWidget(m_openButton);
-    root->addWidget(connGroup);
-
-    // —— 接收/监视组 ——
     auto *monitorGroup = new QGroupBox(QStringLiteral("收发监视"), this);
     auto *monitorLayout = new QVBoxLayout(monitorGroup);
 
@@ -126,12 +75,11 @@ void BasicSerialPage::buildUi()
 
     m_monitor = new QPlainTextEdit(monitorGroup);
     m_monitor->setReadOnly(true);
-    m_monitor->setMaximumBlockCount(kMaxMonitorBlocks); // 自动只保留最近 N 行
+    m_monitor->setMaximumBlockCount(kMaxMonitorBlocks);
     m_monitor->setStyleSheet(QStringLiteral("font-family: Consolas, monospace;"));
     monitorLayout->addWidget(m_monitor, 1);
     root->addWidget(monitorGroup, 1);
 
-    // —— 发送组 ——
     auto *sendGroup = new QGroupBox(QStringLiteral("手动发送"), this);
     auto *sendLayout = new QHBoxLayout(sendGroup);
     m_sendEdit = new QLineEdit(sendGroup);
@@ -148,8 +96,6 @@ void BasicSerialPage::buildUi()
     sendLayout->addWidget(m_sendButton);
     root->addWidget(sendGroup);
 
-    connect(m_refreshButton, &QPushButton::clicked, this, &BasicSerialPage::refreshPorts);
-    connect(m_openButton, &QPushButton::clicked, this, &BasicSerialPage::togglePort);
     connect(m_sendButton, &QPushButton::clicked, this, &BasicSerialPage::sendManual);
     connect(m_sendEdit, &QLineEdit::returnPressed, this, &BasicSerialPage::sendManual);
     connect(m_clearButton, &QPushButton::clicked, this, &BasicSerialPage::clearMonitor);
@@ -158,60 +104,16 @@ void BasicSerialPage::buildUi()
     onSendFormatChanged();
 }
 
-void BasicSerialPage::refreshPorts()
-{
-    const QString current = m_portCombo->currentData().toString();
-    m_portCombo->clear();
-
-    const QList<QSerialPortInfo> ports = QSerialPortInfo::availablePorts();
-    for (const QSerialPortInfo &port : ports) {
-        const QString label = port.description().isEmpty()
-            ? port.portName()
-            : QStringLiteral("%1 - %2").arg(port.portName(), port.description());
-        m_portCombo->addItem(label, port.portName());
-    }
-
-    const int index = m_portCombo->findData(current);
-    if (index >= 0) {
-        m_portCombo->setCurrentIndex(index);
-    }
-    updateControlState();
-}
-
-void BasicSerialPage::togglePort()
-{
-    if (m_transport->isOpen()) {
-        m_transport->close();
-        return;
-    }
-
-    const QString portName = m_portCombo->currentData().toString();
-    if (portName.isEmpty()) {
-        QMessageBox::warning(this, QStringLiteral("串口未选择"), QStringLiteral("请先选择串口。"));
-        return;
-    }
-
-    bool baudOk = false;
-    const qint32 baud = m_baudCombo->currentText().toInt(&baudOk);
-    if (!baudOk || baud <= 0) {
-        QMessageBox::warning(this, QStringLiteral("波特率非法"), QStringLiteral("请输入有效的波特率。"));
-        return;
-    }
-
-    const auto dataBits = static_cast<QSerialPort::DataBits>(m_dataBitsCombo->currentData().toInt());
-    const auto parity = static_cast<QSerialPort::Parity>(m_parityCombo->currentData().toInt());
-    const auto stopBits = static_cast<QSerialPort::StopBits>(m_stopBitsCombo->currentData().toInt());
-
-    QString error;
-    if (!m_transport->open(portName, baud, dataBits, parity, stopBits, &error)) {
-        QMessageBox::critical(this, QStringLiteral("打开串口失败"), error);
-    }
-}
-
 void BasicSerialPage::sendManual()
 {
+    if (m_testRunning) {
+        QMessageBox::warning(this, QStringLiteral("测试进行中"),
+                             QStringLiteral("自动测试运行中请用监视查看收发，不要手动发送。"));
+        return;
+    }
     if (!m_transport->isOpen()) {
-        QMessageBox::warning(this, QStringLiteral("串口未打开"), QStringLiteral("请先打开串口再发送。"));
+        QMessageBox::warning(this, QStringLiteral("串口未打开"),
+                             QStringLiteral("请先用窗口顶部的连接条打开串口再发送。"));
         return;
     }
 
@@ -246,9 +148,7 @@ void BasicSerialPage::sendManual()
     QString error;
     if (!m_transport->send(payload, &error)) {
         QMessageBox::critical(this, QStringLiteral("发送失败"), error);
-        return;
     }
-    appendMonitorLine(QStringLiteral("TX"), payload);
 }
 
 void BasicSerialPage::clearMonitor()
@@ -262,9 +162,13 @@ void BasicSerialPage::onBytesReceived(const QByteArray &data)
     appendMonitorLine(QStringLiteral("RX"), data);
 }
 
-void BasicSerialPage::onPortStateChanged(bool open)
+void BasicSerialPage::onBytesSent(const QByteArray &data)
 {
-    m_openButton->setText(open ? QStringLiteral("关闭串口") : QStringLiteral("打开串口"));
+    appendMonitorLine(QStringLiteral("TX"), data);
+}
+
+void BasicSerialPage::onPortStateChanged(bool)
+{
     updateControlState();
 }
 
@@ -275,9 +179,8 @@ void BasicSerialPage::onOffline(const QString &reason)
 
 void BasicSerialPage::onSendFormatChanged()
 {
-    // BCC 仅在 HEX 发送模式下可用（需求 13.3）。
     const bool hexMode = m_sendFormatCombo->currentData().toString() == QStringLiteral("hex");
-    m_bccCheck->setEnabled(hexMode);
+    m_bccCheck->setEnabled(hexMode && !m_testRunning);
     if (!hexMode) {
         m_bccCheck->setChecked(false);
     }
@@ -299,7 +202,6 @@ QString BasicSerialPage::formatRecord(const QString &direction, const QByteArray
 void BasicSerialPage::appendMonitorLine(const QString &direction, const QByteArray &data)
 {
     const QDateTime now = QDateTime::currentDateTime();
-    // 保存原始字节记录（限最近 N 条），用于切换显示格式时整屏重渲染。
     m_records.append({direction, data, now});
     if (m_records.size() > kMaxMonitorBlocks) {
         m_records.remove(0, m_records.size() - kMaxMonitorBlocks);
@@ -321,11 +223,6 @@ void BasicSerialPage::rerenderMonitor()
 void BasicSerialPage::loadSettings()
 {
     QSettings s(AppConfig::Org(), AppConfig::App());
-    const QString baud = s.value(AppConfig::Key::Baud, QStringLiteral("115200")).toString();
-    m_baudCombo->setCurrentText(baud);
-    m_dataBitsCombo->setCurrentIndex(s.value(AppConfig::Key::DataBits, 0).toInt());
-    m_parityCombo->setCurrentIndex(s.value(AppConfig::Key::Parity, 0).toInt());
-    m_stopBitsCombo->setCurrentIndex(s.value(AppConfig::Key::StopBits, 0).toInt());
     m_displayFormatCombo->setCurrentIndex(s.value(AppConfig::Key::DisplayFormat, 0).toInt());
     m_timestampCheck->setChecked(s.value(AppConfig::Key::Timestamp, true).toBool());
     m_sendFormatCombo->setCurrentIndex(s.value(AppConfig::Key::SendFormat, 0).toInt());
@@ -335,10 +232,6 @@ void BasicSerialPage::loadSettings()
 void BasicSerialPage::saveSettings()
 {
     QSettings s(AppConfig::Org(), AppConfig::App());
-    s.setValue(AppConfig::Key::Baud, m_baudCombo->currentText());
-    s.setValue(AppConfig::Key::DataBits, m_dataBitsCombo->currentIndex());
-    s.setValue(AppConfig::Key::Parity, m_parityCombo->currentIndex());
-    s.setValue(AppConfig::Key::StopBits, m_stopBitsCombo->currentIndex());
     s.setValue(AppConfig::Key::DisplayFormat, m_displayFormatCombo->currentIndex());
     s.setValue(AppConfig::Key::Timestamp, m_timestampCheck->isChecked());
     s.setValue(AppConfig::Key::SendFormat, m_sendFormatCombo->currentIndex());
@@ -348,12 +241,9 @@ void BasicSerialPage::saveSettings()
 void BasicSerialPage::updateControlState()
 {
     const bool open = m_transport->isOpen();
-    // 打开串口后锁定连接参数。
-    m_portCombo->setEnabled(!open);
-    m_refreshButton->setEnabled(!open);
-    m_baudCombo->setEnabled(!open);
-    m_dataBitsCombo->setEnabled(!open);
-    m_parityCombo->setEnabled(!open);
-    m_stopBitsCombo->setEnabled(!open);
-    m_sendButton->setEnabled(open);
+    const bool canSend = open && !m_testRunning;
+    m_sendButton->setEnabled(canSend);
+    m_sendEdit->setEnabled(!m_testRunning);
+    m_sendFormatCombo->setEnabled(!m_testRunning);
+    onSendFormatChanged();
 }

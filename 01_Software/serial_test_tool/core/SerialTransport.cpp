@@ -58,6 +58,47 @@ QString SerialTransport::portName() const
     return m_serial.portName();
 }
 
+qint32 SerialTransport::baudRate() const
+{
+    return m_serial.baudRate();
+}
+
+QSerialPort::DataBits SerialTransport::dataBits() const
+{
+    return m_serial.dataBits();
+}
+
+QSerialPort::Parity SerialTransport::parity() const
+{
+    return m_serial.parity();
+}
+
+QSerialPort::StopBits SerialTransport::stopBits() const
+{
+    return m_serial.stopBits();
+}
+
+QString SerialTransport::paramsText() const
+{
+    QString parity = QStringLiteral("N");
+    switch (m_serial.parity()) {
+    case QSerialPort::EvenParity:
+        parity = QStringLiteral("E");
+        break;
+    case QSerialPort::OddParity:
+        parity = QStringLiteral("O");
+        break;
+    default:
+        break;
+    }
+    const int stop = (m_serial.stopBits() == QSerialPort::TwoStop) ? 2 : 1;
+    return QStringLiteral("%1 %2%3%4")
+        .arg(m_serial.baudRate())
+        .arg(static_cast<int>(m_serial.dataBits()))
+        .arg(parity)
+        .arg(stop);
+}
+
 bool SerialTransport::send(const QByteArray &data, QString *errorMessage)
 {
     if (!m_serial.isOpen()) {
@@ -74,6 +115,7 @@ bool SerialTransport::send(const QByteArray &data, QString *errorMessage)
         }
         return false;
     }
+    emit bytesSent(data);
     return true;
 }
 
@@ -81,6 +123,7 @@ void SerialTransport::onReadyRead()
 {
     const QByteArray data = m_serial.readAll();
     if (!data.isEmpty()) {
+        m_lastRx = data;
         emit bytesReceived(data);
     }
 }

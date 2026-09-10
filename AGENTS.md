@@ -1,4 +1,4 @@
-# CLAUDE.md — 串口测试工具开发指南
+# AGENTS.md — 串口测试工具开发指南
 
 > 本文件是项目的"主控文档"。任何接手的人（包括上下文被清空后的我）只读这一份，就能知道：要做什么、用什么技术、做到哪一步了、下一步做什么、不能踩哪些坑。
 >
@@ -25,7 +25,6 @@
 | D-05 | 工程来源与工具链 | 从 `01_Software/reference/upper_upgrade` **拷贝改造**到 `01_Software/serial_test_tool`，保持 **Qt 6.5.3 + CMake + MinGW 64 位** 不变。 | 复用已验证的 `SerialTransport` 分层和构建配置，用户无需重建工程。 |
 | D-06 | 自动发送入口 | **独立第 3 页**：自动发送页有自己的指令下拉框（从指令库选一条），间隔/次数/启停/统计都在该页；指令库页保持纯管理。 | 结构清晰、两页低耦合，符合需求表 5 页规划。 |
 | D-08 | V1.1 功能增强（用户确认扩张范围） | 在第一版基础上加：①收发监视 HEX/ASCII 切换**回溯重渲染**（存原始记录）；②指令库**导入/导出 JSON**；③自动发送**剩余次数/预计完成时间**；④指令库页**单发**；⑤**最近成功回复**显示；⑥**响应/成功率趋势曲线**（自绘 TrendChart，不引图表库）；⑦**ASCII 发送转义** `\r\n\t\xNN`；⑧**固定节拍模式**经"启用检测"复选明确为压测模式（含 tooltip）。 | 用户明确要求。⑥原属需求表"第一版不做(图表曲线)"、⑧原属 D-03"后续版本"——经用户同意纳入；均不改已有统计/收发核心逻辑。 |
-| D-09 | V1.2 测试工作流（测试工程师闭环） | ①`PortConnectionBar` 常驻顶栏开串口（COM 记忆，波特率含 230400/460800/921600）；②测试运行中串口页可看监视、禁用手动发送；③自动发送改为测试站：稳定性检测/纯发送压测互斥、最近/常用指令、开始旁全量日志、匹配规则提示；④合格线（总成功率下限 + 丢包率上限）红绿判定，不改 §4.1 公式；⑤按时长结束（1 秒～48 小时，当前轮判定后再停）；⑥最近 RX 填入正确回复（内置须先复制）；⑦导出带串口/指令/合格线的报告。 | 产品从「五页调试台」收到「接上就能测、测完能交差」。统计口径与 ping-pong 匹配规则不变。 |
 | D-07 | 自动发送线程架构 | **UI 线程事件驱动**（修订原约束#4 的"工作线程"要求）。引擎用 QTimer + transport 信号驱动，不阻塞；统计在内存实时累加，界面按定时器(200ms)刷新快照。 | ping-pong 是事件驱动而非死循环，发送/匹配是微秒级操作，UI 线程不会被阻塞；避免 QSerialPort 跨线程隐患；对第一次写桌面软件最简单最安全。间隔1ms~5S、千万次均可胜任。**已知代价**：UI 被拖窗/弹框瞬间阻塞时发送会延后几毫秒——属可接受。工作线程化列为后续硬化项。 |
 
 ---
@@ -120,21 +119,18 @@ auto_timeout_ms = clamp(send_interval_ms * 2, 10, 5000)
 ├── CMakeLists.txt
 ├── main.cpp
 ├── app/
-│   ├── MainWindow.{h,cpp}          # 顶栏 PortConnectionBar + QTabWidget + 状态栏
+│   ├── MainWindow.{h,cpp}          # QTabWidget 容器 + 全局状态栏
 ├── core/
 │   ├── SerialTransport.{h,cpp}     # 串口收发（复用参考工程，去掉写死的协议解析）
 │   ├── PacketBuilder.{h,cpp}       # HEX/ASCII 文本 ⇄ 字节；BCC 计算追加
 │   ├── CommandLibrary.{h,cpp}      # 指令库 加载/保存/增删改查；JSON 持久化
 │   ├── CommandItem.h               # 指令数据结构（见第 6 节字段）
-│   ├── CommandHistory.{h,cpp}      # 常用/最近指令 + 最近 RX 填期望
 │   ├── AutoSendEngine.{h,cpp}      # ping-pong 自动发送状态机（跑在工作线程）
 │   ├── ResponseMatcher.{h,cpp}     # 精确匹配判定
 │   ├── TestStatistics.{h,cpp}      # 64 位计数 + 各比率计算（线程安全）
-│   ├── TestVerdict.h               # 合格线判定（只读现有统计）
 │   └── LogManager.{h,cpp}          # 统计/异常/全量日志，异步落盘
 ├── ui/
-│   ├── PortConnectionBar.{h,cpp}   # 常驻串口连接条
-│   ├── BasicSerialPage.{h,cpp}     # Page1 监视 + 手动发送
+│   ├── BasicSerialPage.{h,cpp}     # Page1 串口基础收发
 │   ├── CommandLibraryPage.{h,cpp}  # Page2 指令库（表格，增删改查）
 │   ├── AutoSendPage.{h,cpp}        # Page3 自动发送测试
 │   ├── ResultPage.{h,cpp}          # Page4 结果与日志
@@ -215,18 +211,10 @@ auto_timeout_ms = clamp(send_interval_ms * 2, 10, 5000)
 
 ## 9. 当前进度
 
-- **阶段**：S0~S5 已验收 → **V1.2 测试工作流已落地（决策 D-09）**，待真实设备功能验证。
+- **阶段**：S0~S5 **核心功能均已验收通过** → **第一版功能全部完成**。
   - S5 已验收：summary.csv/exception_*.csv/full_*.csv 落盘、结果页导出 CSV（WPS 可正常打开）。
-  - V1.2：常驻连接条、测试中可看监视、稳定性检测/纯发送压测、最近/常用指令、合格线、按时长、抓包填期望、带参数报告。
-  - 待后续验收（用户暂缓）：S5 配置记忆重启恢复、千万次长稳压力测试；S1 的拔串口此前也标记为暂缓。
+  - 待后续验收（用户暂缓）：S5 配置记忆重启恢复、千万次长稳压力测试；S1 的拔串口、S3 的关检测固定节拍此前也标记为暂缓。
   - 备注：测试运行中 Windows 资源管理器可能把仍打开的日志文件显示为 0KB（文件句柄未关闭，大小元数据滞后），关闭软件后大小正常，非缺陷。
-- **V1.2 测试工作流（2026-09-03，决策 D-09）**：
-  - `ui/PortConnectionBar` 常驻顶栏：开/关串口、COM 记忆、波特率补 230400/460800/921600。`BasicSerialPage` 只留监视+手动发送；`SerialTransport::bytesSent` 让自动发送/单发也进监视。
-  - 运行中保留串口收发页（监视可看、手动发送禁用），指令库/设置仍锁。
-  - 自动发送页：稳定性检测 / 纯发送压测；最近 8 条 + 常用（QSettings）；开始旁全量日志；匹配规则提示；合格线默认总成功率 ≥99%、丢包率 ≤1%；按次数或按时长（1 秒～48 小时）。
-  - 引擎 `StopMode::Duration`：当前轮判定后再停，不改 ping-pong / 统计公式。
-  - `lastRx` 填期望：编辑框、指令库、自动发送三处入口；内置指令拒绝并提示先复制。
-  - 结果页：合格/不合格、导出带身份的报告、打开日志目录。设置页进入时重读全量日志开关。
 - **已做 code-review 并修复**（2026-06-05）：
   - 真 bug：#1 PacketBuilder 用 ASCII 范围判断替换 `isxdigit(toLatin1())` 的 UB；#3 `~LogManager` 中断时补写 summary；#4 CommandLibrary 首次 save 失败上报；#5 LogWriter 缓存改 per-instance + 每会话 `closeFile` 释放句柄；#6 `recordSend()` 移到 `send()` 成功之后。
   - 清理：#7 比率格式化收敛到 `TestStatistics::lossRateText/correctRateText/successRateText/respText`；#10 CSV 转义抽到 `core/CsvUtil.h`（含换行）；#9 Tab 运行锁定改用页面指针(m_autoPage/m_resultPage)不依赖下标；#8 全量日志开关唯一来源=QSettings，`LogManager::beginSession` 时读取（移除 setFullLogEnabled 缓存），与引擎 start 时读取同源。
@@ -252,7 +240,7 @@ auto_timeout_ms = clamp(send_interval_ms * 2, 10, 5000)
   - **配置记忆**：BasicSerialPage(波特率/数据位/校验/停止位/显示格式/时间戳/发送格式/BCC)、AutoSendPage(间隔/次数/检测/超时模式与值/上次指令) 均 QSettings 即改即存、重启恢复(FR-501~503)。
   - 全量日志默认目录 `%AppData%/串口测试工具/logs`。
 - **已完成**：
-  - 需求分析、D-01~D-05 决策、本 CLAUDE.md。
+  - 需求分析、D-01~D-05 决策、本 AGENTS.md。
   - **S0**：`01_Software/serial_test_tool/` 工程骨架（CMake + main + MainWindow 五页 QTabWidget + .gitignore），编译通过。
   - **S1**：`core/SerialTransport`（裸字节流改造）、`core/PacketBuilder`（HEX/ASCII/BCC）、`ui/BasicSerialPage`（串口扫描/参数/开关、手动 HEX/ASCII 发送、收发监视带时间戳、显示格式切换、可选 BCC、异常提示、界面限 1000 行）。编译通过、exe 产出。
   - **S2**：`core/CommandItem`（指令数据结构+JSON 序列化）、`core/CommandLibrary`（加载/保存/CRUD/分组/内置保护/恢复默认，用户文件存 `%AppData%/串口测试工具/commands.json`，首次运行从内置资源初始化）、`ui/CommandEditDialog`（编辑表单）、`ui/CommandLibraryPage`（协议→功能分组树、搜索、新增/复制/修改/删除、内置保护）。默认指令库 132 条由 `tools/gen_default_commands.py` 生成到 `resources/default_commands.json`，经 `resources/resources.qrc` + `CMAKE_AUTORCC` 内置到 exe。编译通过。
@@ -270,9 +258,10 @@ auto_timeout_ms = clamp(send_interval_ms * 2, 10, 5000)
   cmake --build <proj>\build
   ```
   （或用 Qt Creator 打开 `CMakeLists.txt` 选 MinGW Kit 构建。）
-- **下一步（第一版已完成，V1.2 待设备验证）**：①真实设备走一遍顶栏开串口→稳定性检测→合格判定→导出报告；②用户回归暂缓验收项（配置记忆重启、千万次长稳、拔串口）。
+- **下一步（第一版已完成，均为可选）**：①用户回归暂缓验收项（S5 配置记忆重启、千万次长稳、拔串口、关检测固定节拍）；②如需可出 Markdown 版指南进 Git。
 - **待办/风险（非阻塞）**：
   - 默认指令库 132 条仍建议逐条核对 `serial_protocol_summary.md`（占位/不建议命令已在 remark 注明、enabled=false）。
+  - 收发监视的 HEX/ASCII 显示切换只对"切换后的新数据"生效（不回溯重渲染已显示内容）。
   - #2 ping-pong 无序号关联属设计边界（见上）。
 
 ---
@@ -283,7 +272,6 @@ auto_timeout_ms = clamp(send_interval_ms * 2, 10, 5000)
 
 | 日期 | 阶段 | 改动摘要 |
 |---|---|---|
-| 2026-09-03 | V1.2 | 测试工作流（D-09）：常驻连接条+COM记忆、测试中可看监视、稳定性检测/纯发送压测、最近/常用指令、合格线、按时长结束、抓包填期望、带参数报告。统计口径与 ping-pong 未改。 |
 | 2026-06-05 | 打包 | 产出绿色版 `dist/serial_test_tool/`（windeployqt 收依赖+使用说明）与 zip(21.7MB)。Release 编译。记录 windeployqt+MinGW 不可传 --release 的坑。 |
 | 2026-06-05 | V1.1 增强 | 按用户要求加 8 项(D-08)：监视回溯重渲染、指令库导入导出、ETA/剩余、单发、最近成功回复、趋势曲线(TrendChart 自绘)、ASCII 转义(\r\n\t\xNN)、固定节拍模式明确化。编译通过，待功能验证。 |
 | 2026-06-05 | 文档 | 输出 `00_Doc/代码导读与CppQt实战指南.html`（面向 C/单片机工程师的代码导读 + C++/Qt 针对性学习路线，单文件 HTML）。 |
@@ -297,4 +285,4 @@ auto_timeout_ms = clamp(send_interval_ms * 2, 10, 5000)
 | 2026-06-04 | S2 | 指令库：CommandItem/CommandLibrary(JSON 持久化+CRUD+内置保护+恢复默认)、CommandEditDialog、CommandLibraryPage(分组树+搜索+增删改查)；默认库 132 条(gen_default_commands.py 生成，.qrc 内置，需 CMAKE_AUTORCC)；接入 MainWindow 第2页。编译通过，待功能验证。 |
 | 2026-06-04 | S1 验收 | 真实设备验收 S1 通过：COM3 开关、ASCII `CST#`→`CST`、HEX `CA 01 01 00 FF`+BCC(35)、HEX/ASCII 显示切换、拔串口弹窗不崩溃。 |
 | 2026-06-04 | S0/S1 | 搭建 `serial_test_tool` 工程（CMake+5页QTabWidget空壳）；实现 SerialTransport(裸字节流)、PacketBuilder(HEX/ASCII/BCC)、BasicSerialPage(基础串口收发页 FR-001~012)。Qt6.5.3 MinGW + Ninja 编译通过、exe 产出。S1 功能验证待真实设备。 |
-| 2026-06-04 | — | 创建 CLAUDE.md：完成需求分析、确认 5 项关键决策(D-01~05)、修订统计口径与收发判定规则、定义工程结构/JSON 格式/分阶段计划/开发约束。 |
+| 2026-06-04 | — | 创建 AGENTS.md：完成需求分析、确认 5 项关键决策(D-01~05)、修订统计口径与收发判定规则、定义工程结构/JSON 格式/分阶段计划/开发约束。 |

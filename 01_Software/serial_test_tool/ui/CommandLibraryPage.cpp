@@ -1,5 +1,6 @@
 #include "ui/CommandLibraryPage.h"
 
+#include "core/CommandHistory.h"
 #include "core/CommandItem.h"
 #include "core/CommandLibrary.h"
 #include "core/PacketBuilder.h"
@@ -53,7 +54,9 @@ void CommandLibraryPage::buildUi()
     bar->addWidget(m_searchEdit, 1);
 
     m_sendButton = new QPushButton(QStringLiteral("单发"), this);
-    m_sendButton->setToolTip(QStringLiteral("把选中指令立即发送一次（需先在“串口收发”页打开串口）"));
+    m_sendButton->setToolTip(QStringLiteral("把选中指令立即发送一次（需先用顶部连接条打开串口）"));
+    m_fillExpectedButton = new QPushButton(QStringLiteral("填入最近接收"), this);
+    m_fillExpectedButton->setToolTip(QStringLiteral("把最近一包接收写入选中指令的正确回复（内置指令请先复制）"));
     m_addButton = new QPushButton(QStringLiteral("新增"), this);
     m_copyButton = new QPushButton(QStringLiteral("复制"), this);
     m_editButton = new QPushButton(QStringLiteral("修改"), this);
@@ -62,6 +65,7 @@ void CommandLibraryPage::buildUi()
     m_exportButton = new QPushButton(QStringLiteral("导出"), this);
     m_restoreButton = new QPushButton(QStringLiteral("恢复默认"), this);
     bar->addWidget(m_sendButton);
+    bar->addWidget(m_fillExpectedButton);
     bar->addWidget(m_addButton);
     bar->addWidget(m_copyButton);
     bar->addWidget(m_editButton);
@@ -92,6 +96,7 @@ void CommandLibraryPage::buildUi()
     connect(m_editButton, &QPushButton::clicked, this, &CommandLibraryPage::editCommand);
     connect(m_deleteButton, &QPushButton::clicked, this, &CommandLibraryPage::deleteCommand);
     connect(m_sendButton, &QPushButton::clicked, this, &CommandLibraryPage::sendOnce);
+    connect(m_fillExpectedButton, &QPushButton::clicked, this, &CommandLibraryPage::fillExpectedFromLastRx);
     connect(m_importButton, &QPushButton::clicked, this, &CommandLibraryPage::importLibrary);
     connect(m_exportButton, &QPushButton::clicked, this, &CommandLibraryPage::exportLibrary);
     connect(m_restoreButton, &QPushButton::clicked, this, &CommandLibraryPage::restoreDefaults);
@@ -204,6 +209,7 @@ void CommandLibraryPage::onSelectionChanged()
     m_editButton->setEnabled(isLeaf && !builtin);
     m_deleteButton->setEnabled(isLeaf && !builtin);
     m_sendButton->setEnabled(isLeaf);
+    m_fillExpectedButton->setEnabled(isLeaf);
 }
 
 void CommandLibraryPage::onSearchChanged()
@@ -220,6 +226,7 @@ void CommandLibraryPage::addCommand()
     fresh.functionGroup = QStringLiteral("common");
     fresh.builtin = false;
     dlg.setItem(fresh);
+    dlg.setLastRx(m_transport->lastRx());
     dlg.setIdEditable(true);
     if (dlg.exec() != QDialog::Accepted) {
         return;
@@ -245,6 +252,7 @@ void CommandLibraryPage::copyCommand()
     copy.commandId = m_library->makeUniqueId(src->commandId);
     copy.commandName = src->commandName + QStringLiteral("（副本）");
     dlg.setItem(copy);
+    dlg.setLastRx(m_transport->lastRx());
     dlg.setIdEditable(true);
     if (dlg.exec() != QDialog::Accepted) {
         return;
@@ -266,6 +274,7 @@ void CommandLibraryPage::editCommand()
     }
     CommandEditDialog dlg(this);
     dlg.setItem(*src);
+    dlg.setLastRx(m_transport->lastRx());
     dlg.setIdEditable(false); // 主键不可改
     if (dlg.exec() != QDialog::Accepted) {
         return;
@@ -349,7 +358,7 @@ void CommandLibraryPage::sendOnce()
     }
     if (!m_transport->isOpen()) {
         QMessageBox::warning(this, QStringLiteral("串口未打开"),
-            QStringLiteral("请先到“串口收发”页打开串口，再单发指令。"));
+            QStringLiteral("请先用窗口顶部的连接条打开串口，再单发指令。"));
         return;
     }
     // 按指令配置生成字节：HEX(可选 BCC) / ASCII(支持转义)
@@ -371,5 +380,16 @@ void CommandLibraryPage::sendOnce()
     QString err;
     if (!m_transport->send(payload, &err)) {
         QMessageBox::critical(this, QStringLiteral("发送失败"), err);
+        return;
+    }
+    CommandHistory::recordRecent(cmd->commandId);
+}
+
+void CommandLibraryPage::fillExpectedFromLastRx()
+{
+    QString err;
+    if (!CommandHistory::fillExpectedReply(m_library, selectedCommandId(),
+                                           m_transport->lastRx(), &err)) {
+        QMessageBox::warning(this, QStringLiteral("无法填入"), err);
     }
 }

@@ -6,6 +6,8 @@
 #include <QByteArray>
 #include <QElapsedTimer>
 #include <QObject>
+#include <QString>
+#include <QtGlobal>
 
 class SerialTransport;
 class QTimer;
@@ -26,11 +28,22 @@ public:
     Q_ENUM(Outcome)
 
     struct Config {
+        enum class StopMode { Count, Duration };
+
         CommandItem command;     // 要循环发送的指令
         int intervalMs = 100;    // 发送间隔 1~5000
-        quint64 totalCount = 1;  // 发送次数 1~10,000,000
+        quint64 totalCount = 1;  // 发送次数 1~10,000,000（StopMode::Count）
         bool detectionEnabled = true;
         bool fullLog = false;    // 开启后每轮 emit roundCompleted 供全量日志
+        StopMode stopMode = StopMode::Count;
+        int durationMs = 0;      // StopMode::Duration，1 秒～48 小时
+        double passMinSuccessPercent = 99.0;
+        double passMaxLossPercent = 1.0;
+        // 开始测试时的串口快照，供报告表头（不参与发送逻辑）
+        QString portName;
+        qint32 baudRate = 0;
+        QString serialParams;
+        int timeoutMsUsed = 0;   // 引擎 start 后填入实际超时
     };
 
     explicit AutoSendEngine(SerialTransport *transport, QObject *parent = nullptr);
@@ -39,6 +52,8 @@ public:
     State state() const { return m_state; }
     const TestStatistics &statistics() const { return m_stats; }
     quint64 totalCount() const { return m_config.totalCount; }
+    int timeoutMs() const { return m_timeoutMs; }
+    qint64 runElapsedMs() const { return m_runTimer.isValid() ? m_runTimer.elapsed() : 0; }
     const Config &config() const { return m_config; }
     QByteArray lastReply() const { return m_lastReply; } // 最近一次匹配成功收到的回复
 
@@ -67,6 +82,7 @@ private:
     void setState(State state, const QString &text);
     void resolveRound(bool received, bool matched, qint64 respMs);
     void finishNaturally();
+    bool reachedStop() const;
 
     SerialTransport *m_transport = nullptr;
     Config m_config;
@@ -81,6 +97,7 @@ private:
     QByteArray m_lastReply;      // 最近一次匹配成功的回复（供界面显示）
     bool m_inRound = false;      // 当前是否处于"已发出、等回复"状态
     QElapsedTimer m_roundTimer;  // 测响应时间
+    QElapsedTimer m_runTimer;    // 整次测试计时（按时长结束）
 
     QTimer *m_timeoutTimer = nullptr; // 单轮超时（ping-pong）
     QTimer *m_paceTimer = nullptr;    // 轮间间隔 / 固定节拍

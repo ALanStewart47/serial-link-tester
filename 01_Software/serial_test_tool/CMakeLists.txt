@@ -32,6 +32,11 @@ qt_add_executable(serial_test_tool
     core/CsvUtil.h
     core/LogManager.cpp
     core/LogManager.h
+    core/CommandHistory.cpp
+    core/CommandHistory.h
+    core/TestVerdict.h
+    ui/PortConnectionBar.cpp
+    ui/PortConnectionBar.h
     ui/BasicSerialPage.cpp
     ui/BasicSerialPage.h
     ui/CommandEditDialog.cpp
