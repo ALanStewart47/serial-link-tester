@@ -1,7 +1,7 @@
 #include "core/SerialTransport.h"
 
 SerialTransport::SerialTransport(QObject *parent)
-    : QObject(parent)
+    : IByteTransport(parent)
 {
     connect(&m_serial, &QSerialPort::readyRead, this, &SerialTransport::onReadyRead);
     connect(&m_serial, &QSerialPort::errorOccurred, this, &SerialTransport::onErrorOccurred);

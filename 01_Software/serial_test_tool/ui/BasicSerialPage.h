@@ -6,7 +6,7 @@
 #include <QVector>
 #include <QWidget>
 
-class SerialTransport;
+class IByteTransport;
 
 class QCheckBox;
 class QComboBox;
@@ -20,7 +20,7 @@ class BasicSerialPage : public QWidget
     Q_OBJECT
 
 public:
-    explicit BasicSerialPage(SerialTransport *transport, QWidget *parent = nullptr);
+    explicit BasicSerialPage(IByteTransport *transport, QWidget *parent = nullptr);
 
     void setTestRunning(bool running);
 
@@ -45,7 +45,7 @@ private:
     struct MonitorRecord { QString dir; QByteArray data; QDateTime time; };
     QVector<MonitorRecord> m_records;
 
-    SerialTransport *m_transport = nullptr;
+    IByteTransport *m_transport = nullptr;
     bool m_testRunning = false;
 
     QPlainTextEdit *m_monitor = nullptr;

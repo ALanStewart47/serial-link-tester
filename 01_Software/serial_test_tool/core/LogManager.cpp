@@ -116,10 +116,10 @@ void LogManager::beginSession(const QString &commandName, const QString &sendDat
     m_sessionStart = QDateTime::currentDateTime().toString(QStringLiteral("yyyy-MM-dd HH:mm:ss"));
 
     // 异常日志表头（始终写）
-    emit writeLinesRequested(m_excPath, {QStringLiteral("序号,时间,类型,实际HEX,实际ASCII")});
+    emit writeLinesRequested(m_excPath, {QStringLiteral("序号,时间,类型,实际HEX,实际ASCII,指令")});
     // 全量日志表头（仅开启时）
     if (m_fullEnabled) {
-        emit writeLinesRequested(m_fullPath, {QStringLiteral("序号,时间,结果,响应ms,实际HEX,实际ASCII")});
+        emit writeLinesRequested(m_fullPath, {QStringLiteral("序号,时间,结果,响应ms,实际HEX,实际ASCII,指令")});
     }
     // summary 表头（仅文件不存在时）
     if (!QFileInfo::exists(m_summaryPath)) {
@@ -130,7 +130,8 @@ void LogManager::beginSession(const QString &commandName, const QString &sendDat
     m_flushTimer->start();
 }
 
-void LogManager::logRound(quint64 index, AutoSendEngine::Outcome outcome, qint64 respMs, const QByteArray &actual)
+void LogManager::logRound(quint64 index, AutoSendEngine::Outcome outcome, qint64 respMs,
+                          const QByteArray &actual, const QString &commandName)
 {
     if (!m_sessionActive || !m_fullEnabled) {
         return;
@@ -142,27 +143,30 @@ void LogManager::logRound(quint64 index, AutoSendEngine::Outcome outcome, qint64
     case AutoSendEngine::Outcome::Timeout: outText = QStringLiteral("超时"); break;
     case AutoSendEngine::Outcome::SentOnly: outText = QStringLiteral("仅发送"); break;
     }
-    const QString line = QStringLiteral("%1,%2,%3,%4,%5,%6")
+    const QString line = QStringLiteral("%1,%2,%3,%4,%5,%6,%7")
         .arg(QString::number(index),
              QDateTime::currentDateTime().toString(QStringLiteral("HH:mm:ss.zzz")),
              outText,
              respMs < 0 ? QStringLiteral("-") : QString::number(respMs),
              csvCell(PacketBuilder::toHexText(actual)),
-             csvCell(PacketBuilder::toAsciiText(actual)));
+             csvCell(PacketBuilder::toAsciiText(actual)),
+             csvCell(commandName));
     m_fullBuf.append(line);
 }
 
-void LogManager::logException(quint64 index, bool timeout, const QByteArray &actual)
+void LogManager::logException(quint64 index, bool timeout, const QByteArray &actual,
+                              const QString &commandName)
 {
     if (!m_sessionActive) {
         return;
     }
-    const QString line = QStringLiteral("%1,%2,%3,%4,%5")
+    const QString line = QStringLiteral("%1,%2,%3,%4,%5,%6")
         .arg(QString::number(index),
              QDateTime::currentDateTime().toString(QStringLiteral("HH:mm:ss.zzz")),
              timeout ? QStringLiteral("超时(丢包)") : QStringLiteral("回复错误"),
              csvCell(PacketBuilder::toHexText(actual)),
-             csvCell(PacketBuilder::toAsciiText(actual)));
+             csvCell(PacketBuilder::toAsciiText(actual)),
+             csvCell(commandName));
     m_excBuf.append(line);
 }
 

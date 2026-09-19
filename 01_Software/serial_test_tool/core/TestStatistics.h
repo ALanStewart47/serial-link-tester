@@ -39,7 +39,10 @@ public:
     QString lossRateText() const;    // "0.00%"
     QString correctRateText() const; // "N/A" 或 "100.00%"
     QString successRateText() const; // "0.00%"
-    QString respText() const;        // "min 4 / avg 11.7 / max 22"
+    QString minRespText() const;     // "—" 或 "10 ms"
+    QString avgRespText() const;     // "—" 或 "20.5 ms"
+    QString maxRespText() const;     // "—" 或 "31 ms"
+    QString respText() const;        // "最小 10 ms　平均 20.5 ms　最大 31 ms"
 
 private:
     quint64 m_send = 0;

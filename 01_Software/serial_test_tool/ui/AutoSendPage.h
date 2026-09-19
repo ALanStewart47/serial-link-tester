@@ -1,30 +1,39 @@
 #pragma once
 
 #include "core/AutoSendEngine.h"
+#include "core/CommandItem.h"
 
 #include <QElapsedTimer>
+#include <QList>
+#include <QStringList>
 #include <QWidget>
 
 class CommandLibrary;
-class SerialTransport;
+class IByteTransport;
 
 class QCheckBox;
 class QComboBox;
 class QDoubleSpinBox;
 class QLabel;
+class QLineEdit;
+class QListWidget;
 class QProgressBar;
 class QPushButton;
 class QRadioButton;
 class QSpinBox;
+class QTableWidget;
 class QTimer;
+class QTreeWidget;
+class QTreeWidgetItem;
 class QShowEvent;
+class QEvent;
 
 class AutoSendPage : public QWidget
 {
     Q_OBJECT
 
 public:
-    AutoSendPage(CommandLibrary *library, AutoSendEngine *engine, SerialTransport *transport,
+    AutoSendPage(CommandLibrary *library, AutoSendEngine *engine, IByteTransport *transport,
                  QWidget *parent = nullptr);
 
 signals:
@@ -32,10 +41,14 @@ signals:
 
 protected:
     void showEvent(QShowEvent *event) override;
+    bool eventFilter(QObject *watched, QEvent *event) override;
 
 private slots:
     void reloadCommands();
     void onCommandChanged();
+    void onLibrarySelectionChanged();
+    void onPlaylistSelectionChanged();
+    void onLibraryDoubleClicked(QTreeWidgetItem *item, int column);
     void onTimeoutModeChanged();
     void onModeChanged();
     void onStopModeChanged();
@@ -45,6 +58,10 @@ private slots:
     void refreshStats();
     void toggleFavorite();
     void fillExpectedFromLastRx();
+    void addCurrentToPlaylist();
+    void removeSelectedFromPlaylist();
+    void movePlaylistItem(int delta);
+    void clearPlaylist();
 
 private:
     void buildUi();
@@ -57,18 +74,35 @@ private:
     void applyDurationMsToUi(int durationMs);
     bool detectionEnabled() const;
     QString currentCommandId() const;
+    QStringList selectedLibraryIds() const;
+    QStringList playlistIds() const;
+    QList<CommandItem> playlistItems() const;
+    void restorePlaylist(const QStringList &ids);
+    void refreshPlaylistLabels();
+    void refreshSlotTable();
+    void highlightCurrentSlot();
+    void appendToPlaylist(const QStringList &ids);
+    void selectTreeCommand(const QString &commandId);
 
     CommandLibrary *m_library = nullptr;
     AutoSendEngine *m_engine = nullptr;
-    SerialTransport *m_transport = nullptr;
+    IByteTransport *m_transport = nullptr;
     QTimer *m_refreshTimer = nullptr;
+    bool m_previewFromPlaylist = false;
 
-    QComboBox *m_commandCombo = nullptr;
+    QLineEdit *m_searchEdit = nullptr;
+    QTreeWidget *m_libraryTree = nullptr;
     QPushButton *m_favButton = nullptr;
     QPushButton *m_fillExpectedButton = nullptr;
     QLabel *m_sendPreview = nullptr;
     QLabel *m_replyPreview = nullptr;
     QLabel *m_matchHint = nullptr;
+    QListWidget *m_playlist = nullptr;
+    QPushButton *m_addToPlaylist = nullptr;
+    QPushButton *m_playlistUp = nullptr;
+    QPushButton *m_playlistDown = nullptr;
+    QPushButton *m_playlistRemove = nullptr;
+    QPushButton *m_playlistClear = nullptr;
     QSpinBox *m_intervalSpin = nullptr;
     QRadioButton *m_stopCountRadio = nullptr;
     QRadioButton *m_stopDurationRadio = nullptr;
@@ -82,6 +116,7 @@ private:
     QDoubleSpinBox *m_passMinSuccess = nullptr;
     QDoubleSpinBox *m_passMaxLoss = nullptr;
     QLabel *m_verdictLabel = nullptr;
+    QElapsedTimer m_verdictClock;
     QCheckBox *m_fullLogCheck = nullptr;
     QPushButton *m_startButton = nullptr;
     QPushButton *m_stopButton = nullptr;
@@ -99,5 +134,8 @@ private:
     QLabel *m_statLoss = nullptr;
     QLabel *m_statCorrect = nullptr;
     QLabel *m_statSuccess = nullptr;
-    QLabel *m_statResp = nullptr;
+    QLabel *m_statRespMin = nullptr;
+    QLabel *m_statRespAvg = nullptr;
+    QLabel *m_statRespMax = nullptr;
+    QTableWidget *m_slotTable = nullptr;
 };

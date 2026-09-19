@@ -3,7 +3,7 @@
 #include "core/AutoSendEngine.h"
 #include "core/CommandLibrary.h"
 #include "core/LogManager.h"
-#include "core/SerialTransport.h"
+#include "core/LinkHub.h"
 
 #include <QMainWindow>
 
@@ -11,6 +11,7 @@ class BasicSerialPage;
 class PortConnectionBar;
 class QLabel;
 class QTabWidget;
+class QTimer;
 
 class MainWindow : public QMainWindow
 {
@@ -28,9 +29,9 @@ private slots:
 private:
     void buildUi();
 
-    SerialTransport m_transport;
+    LinkHub m_link;
     CommandLibrary m_library;
-    AutoSendEngine m_engine{&m_transport};
+    AutoSendEngine m_engine{&m_link};
     LogManager m_log;
     PortConnectionBar *m_portBar = nullptr;
     QTabWidget *m_tabs = nullptr;
@@ -38,4 +39,7 @@ private:
     QWidget *m_autoPage = nullptr;
     QWidget *m_resultPage = nullptr;
     QLabel *m_portStatusLabel = nullptr;
+    QLabel *m_creditLabel = nullptr;
+    QLabel *m_statusMessageLabel = nullptr;
+    QTimer *m_statusMessageTimer = nullptr;
 };

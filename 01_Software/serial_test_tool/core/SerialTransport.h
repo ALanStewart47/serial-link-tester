@@ -1,14 +1,14 @@
 #pragma once
 
-#include <QByteArray>
-#include <QObject>
+#include "core/IByteTransport.h"
+
 #include <QSerialPort>
 #include <QString>
 
 // 串口收发封装。改造自参考工程 upper_upgrade/SerialTransport：
 // 去掉了写死的协议帧解析（FrameParser），改为对外抛裸字节流，保持协议无关
 // （见 CLAUDE.md 开发约束 #6：核心收发代码不得内置任何具体命令语义）。
-class SerialTransport : public QObject
+class SerialTransport : public IByteTransport
 {
     Q_OBJECT
 
@@ -21,26 +21,18 @@ public:
               QSerialPort::Parity parity,
               QSerialPort::StopBits stopBits,
               QString *errorMessage);
-    void close();
-    bool isOpen() const;
-    QString portName() const;
-    qint32 baudRate() const;
+    void close() override;
+    bool isOpen() const override;
+    QString portName() const override;
+    qint32 baudRate() const override;
     QSerialPort::DataBits dataBits() const;
     QSerialPort::Parity parity() const;
     QSerialPort::StopBits stopBits() const;
     // 例如 "115200 8N1"，供测试报告表头。
-    QString paramsText() const;
-    QByteArray lastRx() const { return m_lastRx; }
+    QString paramsText() const override;
+    QByteArray lastRx() const override { return m_lastRx; }
 
-    // 发送裸字节。失败返回 false 并填充 errorMessage。
-    bool send(const QByteArray &data, QString *errorMessage = nullptr);
-
-signals:
-    void bytesReceived(const QByteArray &data); // 收到的原始字节流
-    void bytesSent(const QByteArray &data);     // 实际写出的字节（手动/自动/单发共用）
-    void logMessage(const QString &message);    // 面向用户的中文日志
-    void offline(const QString &reason);        // 设备掉线/被拔出
-    void portStateChanged(bool open);
+    bool send(const QByteArray &data, QString *errorMessage = nullptr) override;
 
 private slots:
     void onReadyRead();

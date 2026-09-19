@@ -5,16 +5,19 @@
 
 #include <QByteArray>
 #include <QElapsedTimer>
+#include <QList>
 #include <QObject>
 #include <QString>
+#include <QVector>
 #include <QtGlobal>
 
-class SerialTransport;
+class IByteTransport;
 class QTimer;
 
 // 自动发送引擎（UI 线程事件驱动，决策 D-07）。
 // 检测开启：ping-pong —— 发一条 → 等回复/超时 → 隔 interval 发下一条（D-03）。
 // 检测关闭：固定节拍 —— 每 interval 发一条，只计发送，不等待不统计（§4.2.5）。
+// 清单：按 playlist 顺序轮询；一条时等价于原来的单指令循环（D-10）。
 class AutoSendEngine : public QObject
 {
     Q_OBJECT
@@ -30,23 +33,30 @@ public:
     struct Config {
         enum class StopMode { Count, Duration };
 
-        CommandItem command;     // 要循环发送的指令
+        CommandItem command;     // 当前/首条指令（兼容旧日志；运行中随槽位更新）
+        QList<CommandItem> playlist; // 轮询清单；空则退化为 {command}
         int intervalMs = 100;    // 发送间隔 1~5000
-        quint64 totalCount = 1;  // 发送次数 1~10,000,000（StopMode::Count）
+        quint64 totalCount = 1;  // 发送次数 1~10,000,000（StopMode::Count，总发送条数）
         bool detectionEnabled = true;
         bool fullLog = false;    // 开启后每轮 emit roundCompleted 供全量日志
         StopMode stopMode = StopMode::Count;
         int durationMs = 0;      // StopMode::Duration，1 秒～48 小时
         double passMinSuccessPercent = 99.0;
         double passMaxLossPercent = 1.0;
-        // 开始测试时的串口快照，供报告表头（不参与发送逻辑）
+        // 开始测试时的链路快照，供报告表头（不参与发送逻辑）
         QString portName;
         qint32 baudRate = 0;
         QString serialParams;
         int timeoutMsUsed = 0;   // 引擎 start 后填入实际超时
     };
 
-    explicit AutoSendEngine(SerialTransport *transport, QObject *parent = nullptr);
+    struct SlotStat {
+        QString commandId;
+        QString commandName;
+        TestStatistics stats;
+    };
+
+    explicit AutoSendEngine(IByteTransport *transport, QObject *parent = nullptr);
 
     bool isRunning() const { return m_state == State::Running; }
     State state() const { return m_state; }
@@ -56,6 +66,11 @@ public:
     qint64 runElapsedMs() const { return m_runTimer.isValid() ? m_runTimer.elapsed() : 0; }
     const Config &config() const { return m_config; }
     QByteArray lastReply() const { return m_lastReply; } // 最近一次匹配成功收到的回复
+
+    int currentSlotIndex() const { return m_slotIndex; }
+    QVector<SlotStat> slotStats() const;
+    QString playlistTitle() const;
+    QString playlistSendSummary() const;
 
     // 启动。失败（串口未开、指令非法等）返回 false 并填 errorMessage。
     bool start(const Config &config, QString *errorMessage);
@@ -67,10 +82,12 @@ signals:
     void roundResolved();   // 每轮结束（成功/失败/超时），UI 不必每次刷新
     // 仅在失败轮发出（超时或回复错误），成功轮不发 —— 避免高速刷屏。
     // timeout=true 表示一字节未收到(丢包)，false 表示收到但内容不符。
-    void roundFailed(quint64 roundIndex, bool timeout, const QByteArray &actual);
+    void roundFailed(quint64 roundIndex, bool timeout, const QByteArray &actual,
+                     const QString &commandName);
     // 每轮都发（仅当 config.fullLog 开启），供全量日志。
     void roundCompleted(quint64 roundIndex, AutoSendEngine::Outcome outcome,
-                        qint64 respMs, const QByteArray &actual);
+                        qint64 respMs, const QByteArray &actual,
+                        const QString &commandName);
 
 private slots:
     void onBytesReceived(const QByteArray &data);
@@ -79,12 +96,24 @@ private slots:
     void beginRound();      // 检测开启：开始新一轮
 
 private:
+    struct Slot {
+        CommandItem item;
+        QByteArray payload;
+        QByteArray expected;
+        bool expectEmpty = true;
+        TestStatistics stats;
+    };
+
     void setState(State state, const QString &text);
     void resolveRound(bool received, bool matched, qint64 respMs);
     void finishNaturally();
     bool reachedStop() const;
+    bool prepareSlots(QString *errorMessage);
+    void applyCurrentSlot();
+    void advanceSlot();
+    QString currentCommandName() const;
 
-    SerialTransport *m_transport = nullptr;
+    IByteTransport *m_transport = nullptr;
     Config m_config;
     State m_state = State::Idle;
 
@@ -103,4 +132,6 @@ private:
     QTimer *m_paceTimer = nullptr;    // 轮间间隔 / 固定节拍
 
     TestStatistics m_stats;
+    QVector<Slot> m_slots;
+    int m_slotIndex = 0;
 };

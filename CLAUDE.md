@@ -26,6 +26,8 @@
 | D-06 | 自动发送入口 | **独立第 3 页**：自动发送页有自己的指令下拉框（从指令库选一条），间隔/次数/启停/统计都在该页；指令库页保持纯管理。 | 结构清晰、两页低耦合，符合需求表 5 页规划。 |
 | D-08 | V1.1 功能增强（用户确认扩张范围） | 在第一版基础上加：①收发监视 HEX/ASCII 切换**回溯重渲染**（存原始记录）；②指令库**导入/导出 JSON**；③自动发送**剩余次数/预计完成时间**；④指令库页**单发**；⑤**最近成功回复**显示；⑥**响应/成功率趋势曲线**（自绘 TrendChart，不引图表库）；⑦**ASCII 发送转义** `\r\n\t\xNN`；⑧**固定节拍模式**经"启用检测"复选明确为压测模式（含 tooltip）。 | 用户明确要求。⑥原属需求表"第一版不做(图表曲线)"、⑧原属 D-03"后续版本"——经用户同意纳入；均不改已有统计/收发核心逻辑。 |
 | D-09 | V1.2 测试工作流（测试工程师闭环） | ①`PortConnectionBar` 常驻顶栏开串口（COM 记忆，波特率含 230400/460800/921600）；②测试运行中串口页可看监视、禁用手动发送；③自动发送改为测试站：稳定性检测/纯发送压测互斥、最近/常用指令、开始旁全量日志、匹配规则提示；④合格线（总成功率下限 + 丢包率上限）红绿判定，不改 §4.1 公式；⑤按时长结束（1 秒～48 小时，当前轮判定后再停）；⑥最近 RX 填入正确回复（内置须先复制）；⑦导出带串口/指令/合格线的报告。 | 产品从「五页调试台」收到「接上就能测、测完能交差」。统计口径与 ping-pong 匹配规则不变。 |
+| D-10 | 多指令轮询清单 | 自动发送页维护**有序轮询清单**（从指令库挑选，可重复、可上下移）。运行时按清单循环 A→B→C→A…；每条仍 ping-pong，各自 payload / BCC / 正确回复。次数 = **总发送条数**。整体统计 + **分指令统计**；合格线对整体与每条已发送指令都生效（避免总成功率掩盖单条失败）。清单 ID 存 QSettings，**不用**指令库 `enabled` 当测试集。单条清单 = 原来的单指令循环。 | 用户确认本工具用于测产品：单条循环只是 demo，产品测试需要多条指令轮询。不改 §4.1 公式与匹配规则。 |
+| D-11 | 网口透传（仅顶栏+传输层） | 顶栏串口/网口互斥。网口 = CH9121 UDP 扫描（可手填 IP）+ TCP 透传（默认 6600）。字节与串口等价，指令库/清单/ping-pong/统计不变。TCP **不能**改设备侧波特率（由 CH9121 决定，常见 19200）。不做 MCU/FPGA 烧录、不上电等待、不写 CH9121 配置、不多 TCP、不把 UDP 当业务口。报告链路写 `CH9121 ip:port`。 | 产品可用网口测，复用 ISP-FLASHER 扫描/TCP 经验；业务仍是串口协议测试。 |
 | D-07 | 自动发送线程架构 | **UI 线程事件驱动**（修订原约束#4 的"工作线程"要求）。引擎用 QTimer + transport 信号驱动，不阻塞；统计在内存实时累加，界面按定时器(200ms)刷新快照。 | ping-pong 是事件驱动而非死循环，发送/匹配是微秒级操作，UI 线程不会被阻塞；避免 QSerialPort 跨线程隐患；对第一次写桌面软件最简单最安全。间隔1ms~5S、千万次均可胜任。**已知代价**：UI 被拖窗/弹框瞬间阻塞时发送会延后几毫秒——属可接受。工作线程化列为后续硬化项。 |
 
 ---
@@ -35,7 +37,7 @@
 | 项 | 选型 | 说明 |
 |---|---|---|
 | 语言 | C++17 | 与参考工程一致 |
-| 框架 | Qt 6.5.3 | Widgets（桌面 UI）、SerialPort（串口）、Core（QJsonDocument/QFile/QSettings/QThread） |
+| 框架 | Qt 6.5.3 | Widgets、SerialPort、Network（CH9121 扫描/TCP 透传，D-11）、Core |
 | 构建 | CMake (≥3.19) + Ninja | 参考工程已有 `CMakeLists.txt`，照搬扩展 |
 | 编译器/Kit | MinGW 64 位（Desktop_Qt_6_5_3_MinGW_64_bit） | 参考工程的 build 目录即此 Kit |
 | 平台 | 仅 Windows | V1 不做跨平台 |
@@ -123,6 +125,11 @@ auto_timeout_ms = clamp(send_interval_ms * 2, 10, 5000)
 │   ├── MainWindow.{h,cpp}          # 顶栏 PortConnectionBar + QTabWidget + 状态栏
 ├── core/
 │   ├── SerialTransport.{h,cpp}     # 串口收发（复用参考工程，去掉写死的协议解析）
+│   ├── IByteTransport.h            # 字节管道接口（串口/网口共用）
+│   ├── NetworkTransport.{h,cpp}    # CH9121 TCP 透传
+│   ├── LinkHub.{h,cpp}             # 串口/网口互斥复用
+│   ├── Ch9121Scanner.{h,cpp}       # UDP 扫描 CH9121
+│   ├── W5500ConfigProtocol.{h,cpp} # 扫描包解析（不写配置）
 │   ├── PacketBuilder.{h,cpp}       # HEX/ASCII 文本 ⇄ 字节；BCC 计算追加
 │   ├── CommandLibrary.{h,cpp}      # 指令库 加载/保存/增删改查；JSON 持久化
 │   ├── CommandItem.h               # 指令数据结构（见第 6 节字段）
@@ -133,7 +140,7 @@ auto_timeout_ms = clamp(send_interval_ms * 2, 10, 5000)
 │   ├── TestVerdict.h               # 合格线判定（只读现有统计）
 │   └── LogManager.{h,cpp}          # 统计/异常/全量日志，异步落盘
 ├── ui/
-│   ├── PortConnectionBar.{h,cpp}   # 常驻串口连接条
+│   ├── PortConnectionBar.{h,cpp}   # 常驻连接条：串口 或 CH9121 网口
 │   ├── BasicSerialPage.{h,cpp}     # Page1 监视 + 手动发送
 │   ├── CommandLibraryPage.{h,cpp}  # Page2 指令库（表格，增删改查）
 │   ├── AutoSendPage.{h,cpp}        # Page3 自动发送测试
@@ -200,7 +207,7 @@ auto_timeout_ms = clamp(send_interval_ms * 2, 10, 5000)
 
 ## 8. 开发约束（防止最终实现"变形"，硬性遵守）
 
-1. **范围冻结**：V1 只做需求表 + 本文件第 4 节的内容。第 7 节「第一版不实现」清单（多指令脚本、通配/正则匹配、多串口、TCP/UDP、跨平台、图表曲线）一律不做。想加新功能先更新本文件并说明，不得静默扩张。
+1. **范围冻结**：V1 只做需求表 + 本文件第 4 节 + 已记录决策（D-08~D-11）。第 7 节其余「第一版不实现」项（通配/正则匹配、多串口、跨平台、把 UDP 当业务口）一律不做。TCP/UDP 仅 D-11 允许的 CH9121 透传（顶栏+传输层）。想加新功能先更新本文件并说明，不得静默扩张。
 2. **决策不回退**：第 1 节 D-01~D-05 是已确认决策。要改必须先在本文件记录原因并征得用户同意。
 3. **统计口径唯一**：所有比率计算只用第 4.1 节定义，不在代码里另立公式。
 4. **线程纪律（按 D-07 修订）**：V1 自动发送引擎与串口收发在 UI 线程事件驱动，不得用阻塞循环/sleep 占住 UI；统计内存实时累加，界面按定时器(100~300ms)刷新快照，禁止"收一条刷一次界面"。后续若改工作线程化，须跨线程信号槽、禁止裸指针共享可变状态。
@@ -215,7 +222,7 @@ auto_timeout_ms = clamp(send_interval_ms * 2, 10, 5000)
 
 ## 9. 当前进度
 
-- **阶段**：S0~S5 已验收 → **V1.2 测试工作流已落地（决策 D-09）**，待真实设备功能验证。
+- **阶段**：S0~S5 已验收 → **V1.2（D-09）** → **V1.3 轮询清单（D-10）** → **V1.4 网口透传已落地（D-11）**，待真实设备验证。
   - S5 已验收：summary.csv/exception_*.csv/full_*.csv 落盘、结果页导出 CSV（WPS 可正常打开）。
   - V1.2：常驻连接条、测试中可看监视、稳定性检测/纯发送压测、最近/常用指令、合格线、按时长、抓包填期望、带参数报告。
   - 待后续验收（用户暂缓）：S5 配置记忆重启恢复、千万次长稳压力测试；S1 的拔串口此前也标记为暂缓。
@@ -233,15 +240,15 @@ auto_timeout_ms = clamp(send_interval_ms * 2, 10, 5000)
   - 已知/可接受：#2 ping-pong 无序号关联（仅设备回复接近超时时显现，属设计边界，未改）。
 - **V1.1 功能增强已完成（编译通过，待功能验证，决策 D-08）**：
   - 收发监视切换显示格式/时间戳→回溯重渲染（BasicSerialPage 存 `m_records`，`rerenderMonitor`）。
-  - 指令库导入/导出 JSON（`CommandLibrary::exportToFile/importFromFile` + 页面按钮）；指令库页"单发"按钮（注入 `SerialTransport`）。
+  - 指令库导入/导出 JSON（`CommandLibrary::exportToFile/importFromFile` + 页面按钮）；亦可 CSV（UTF-8 BOM，表头与 JSON 字段相同）；指令库页"单发"按钮（注入 `IByteTransport`）。
   - 自动发送页：剩余次数 + ETA（`m_testTimer` 外推）、最近成功回复显示（引擎 `lastReply()`）。
   - 结果页趋势曲线：`ui/TrendChart`（自绘折线，不引 Qt Charts），累计平均响应(ms)+累计成功率(%)，运行中每 300ms 采样。
   - `PacketBuilder::fromAsciiEscaped`（`\r \n \t \0 \\ \xNN`）用于手动 ASCII 发送与指令库单发。
   - 固定节拍：经"启用检测"复选 + tooltip 明确为"不等回复、按间隔压测"模式（引擎 tickFixedRate 早已支持）。
 - **文档**：已出 `00_Doc/代码导读与CppQt实战指南.html`（面向只懂 C 的单片机工程师：工程结构/各模块逐讲/信号槽/C→C++Qt 学习路线/练习）。
-- **打包（绿色版/免安装，已产出）**：`01_Software/dist/serial_test_tool/`（exe + Qt DLL + 平台插件 + MinGW 运行时 + 使用说明.txt），压缩包 `01_Software/dist/serial_test_tool_v1.0_win64.zip`（约 21.7MB）。
-  - 步骤：① `cmake -B build-release -DCMAKE_BUILD_TYPE=Release` 编译 Release；② 拷 exe 到独立目录；③ `windeployqt --compiler-runtime --no-translations <exe>`；④ Compress-Archive 打 zip。
-  - **坑（重要）**：windeployqt 在 MinGW 下会把插件误判为 debug，**不要传 `--release`**（否则报 "Unable to find the platform plugin"）；让它自动匹配即可。PATH 里只放 6.5.3 的 bin，避免与其它 Qt(6.10.1) 冲突。
+- **打包（绿色版/免安装）**：`01_Software/dist/serial_test_tool/`，版本目录 `serial_test_tool_v0.1/`，压缩包 `01_Software/dist/serial_test_tool_v0.1_win64.zip`。脚本：`01_Software/serial_test_tool/pack_release.ps1`。
+  - 步骤：Release 编译 → 拷 exe → `windeployqt --compiler-runtime --no-translations`（含 Qt6Network）→ 打 zip。
+  - **坑（重要）**：windeployqt 在 MinGW 下**不要传 `--release`**（否则缺 platform plugin）；PATH 只放 6.5.3 的 bin。
 - **后续可选项**：长稳压力测试收尾、暂缓验收项（配置记忆重启/拔串口/关检测固定节拍）的回归；如需面向普通用户可再用 Inno Setup 套安装包。
 - **S5 实现**：
   - `core/AppConfig.h`：QSettings 的 org/app + 全部配置键（独立于指令库 AppDataLocation）。
@@ -270,7 +277,15 @@ auto_timeout_ms = clamp(send_interval_ms * 2, 10, 5000)
   cmake --build <proj>\build
   ```
   （或用 Qt Creator 打开 `CMakeLists.txt` 选 MinGW Kit 构建。）
-- **下一步（第一版已完成，V1.2 待设备验证）**：①真实设备走一遍顶栏开串口→稳定性检测→合格判定→导出报告；②用户回归暂缓验收项（配置记忆重启、千万次长稳、拔串口）。
+- **V1.3 轮询清单（2026-09-10，决策 D-10）**：
+  - 自动发送页左右分栏：左为指令库分组树（可搜索、多选、双击加入），右为发送顺序（可拖拽/上移下移）。发送/回复预览跟当前选中项走。清单为空点开始会加入左侧当前选中指令。
+  - 引擎按清单顺序轮询，每条独立匹配与分指令 `TestStatistics`；次数为总发送条数；超时仍为页级（间隔×2 或手动）。
+  - 合格线：整体 + 任一条已发送指令未达门槛则不合格。结果页/报告/异常日志带指令名。
+- **V1.4 网口透传（2026-09-10，决策 D-11）**：
+  - 顶栏串口/网口单选；网口：选网卡 → 扫描 CH9121 → 设备列表或手填 IP → TCP 6600 连接。串口与 TCP 互斥。
+  - `IByteTransport` + `LinkHub` 把串口/`NetworkTransport` 合成一条字节管道；自动发送/监视/单发不改协议逻辑。
+  - 设备侧波特率由 CH9121 决定，软件不能改。报告链路为 `CH9121 ip:port`。不做烧录/写配置。
+- **下一步**：①真实设备走一遍清单轮询（≥2 条）；②网口：扫描 CH9121 → TCP 连接 → 自动发送与串口对照；③用户回归暂缓验收项（配置记忆重启、千万次长稳、拔串口）。
 - **待办/风险（非阻塞）**：
   - 默认指令库 132 条仍建议逐条核对 `serial_protocol_summary.md`（占位/不建议命令已在 remark 注明、enabled=false）。
   - #2 ping-pong 无序号关联属设计边界（见上）。
@@ -283,6 +298,11 @@ auto_timeout_ms = clamp(send_interval_ms * 2, 10, 5000)
 
 | 日期 | 阶段 | 改动摘要 |
 |---|---|---|
+| 2026-09-10 | 打包 | 第一版绿色包 v0.1：`dist/serial_test_tool_v0.1_win64.zip`（Release + windeployqt，含网口 Qt6Network）。 |
+| 2026-09-10 | V1.4 | 网口透传（D-11）：顶栏串口/网口互斥；CH9121 UDP 扫描 + TCP 透传；IByteTransport/LinkHub。指令库/清单/统计未改。 |
+| 2026-09-10 | V1.3 | 轮询清单挑选改为左右分栏（分组树多选/双击加入，右侧为发送顺序；预览跟选中项走）。统计口径与 ping-pong 未改。 |
+| 2026-09-10 | V1.3 | 轮询清单（D-10）：自动发送页有序清单循环发送；分指令统计与合格线；报告/异常明细带指令名。单条清单兼容原循环。统计口径与 ping-pong 未改。 |
+| 2026-09-10 | 显示 | 响应时间单独一行，分列最小 / 平均 / 最大（自动发送页实时统计 + 结果页汇总）。 |
 | 2026-09-03 | V1.2 | 测试工作流（D-09）：常驻连接条+COM记忆、测试中可看监视、稳定性检测/纯发送压测、最近/常用指令、合格线、按时长结束、抓包填期望、带参数报告。统计口径与 ping-pong 未改。 |
 | 2026-06-05 | 打包 | 产出绿色版 `dist/serial_test_tool/`（windeployqt 收依赖+使用说明）与 zip(21.7MB)。Release 编译。记录 windeployqt+MinGW 不可传 --release 的坑。 |
 | 2026-06-05 | V1.1 增强 | 按用户要求加 8 项(D-08)：监视回溯重渲染、指令库导入导出、ETA/剩余、单发、最近成功回复、趋势曲线(TrendChart 自绘)、ASCII 转义(\r\n\t\xNN)、固定节拍模式明确化。编译通过，待功能验证。 |

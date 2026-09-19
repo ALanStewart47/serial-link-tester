@@ -3,18 +3,12 @@
 #include <QFontMetrics>
 #include <QPainter>
 
-namespace {
-constexpr int kCaptionWidth = 96;
-constexpr int kBarHeight = 22;
-constexpr int kRadius = 4;
-}
-
 RateBar::RateBar(const QString &caption, const QColor &fillColor, QWidget *parent)
     : QWidget(parent)
     , m_caption(caption)
     , m_fill(fillColor)
 {
-    setMinimumHeight(kBarHeight + 6);
+    setMinimumHeight(62);
 }
 
 void RateBar::setRate(double pct)
@@ -26,7 +20,7 @@ void RateBar::setRate(double pct)
 
 QSize RateBar::sizeHint() const
 {
-    return {320, kBarHeight + 6};
+    return {280, 62};
 }
 
 void RateBar::paintEvent(QPaintEvent *)
@@ -34,30 +28,25 @@ void RateBar::paintEvent(QPaintEvent *)
     QPainter p(this);
     p.setRenderHint(QPainter::Antialiasing, true);
 
-    const int y = (height() - kBarHeight) / 2;
-
-    // 标题
-    p.setPen(palette().color(QPalette::WindowText));
-    p.drawText(QRect(0, y, kCaptionWidth - 8, kBarHeight),
-               Qt::AlignVCenter | Qt::AlignLeft, m_caption);
-
-    // 轨道
-    const QRect track(kCaptionWidth, y, width() - kCaptionWidth, kBarHeight);
-    p.setPen(Qt::NoPen);
-    p.setBrush(QColor(0xE6, 0xE6, 0xE6));
-    p.drawRoundedRect(track, kRadius, kRadius);
-
-    // 填充
-    if (!m_na && m_pct > 0.0) {
-        QRect fill = track;
-        fill.setWidth(static_cast<int>(track.width() * m_pct / 100.0));
-        p.setBrush(m_fill);
-        p.drawRoundedRect(fill, kRadius, kRadius);
-    }
-
-    // 文字（百分比 / N/A）
     const QString text = m_na ? QStringLiteral("N/A")
                               : QStringLiteral("%1%").arg(m_pct, 0, 'f', 2);
-    p.setPen(Qt::black);
-    p.drawText(track, Qt::AlignCenter, text);
+    p.setPen(palette().color(QPalette::WindowText));
+    p.drawText(QRect(0, 0, width(), 22), Qt::AlignLeft | Qt::AlignVCenter, m_caption);
+    QFont valueFont = font();
+    valueFont.setPointSize(17);
+    valueFont.setBold(true);
+    p.setFont(valueFont);
+    p.drawText(QRect(0, 22, width(), 30), Qt::AlignLeft | Qt::AlignVCenter, text);
+    const QRectF track(0, 56, width(), 6);
+    p.setPen(Qt::NoPen);
+    p.setBrush(QColor("#e5ebf4"));
+    p.drawRoundedRect(track, 3, 3);
+    if (!m_na && m_pct > 0.0) {
+        // Clip to the track so very small percentages cannot paint outside it.
+        p.save();
+        p.setClipRect(QRectF(0, 56, width() * m_pct / 100.0, 6));
+        p.setBrush(m_fill);
+        p.drawRoundedRect(track, 3, 3);
+        p.restore();
+    }
 }

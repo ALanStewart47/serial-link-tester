@@ -16,6 +16,11 @@ namespace Key {
 constexpr auto LogDir        = "log/dir";
 constexpr auto FullLog       = "log/fullEnabled";
 
+constexpr auto LinkMode      = "link/mode";       // 0 serial 1 network
+constexpr auto NetIp         = "net/ip";
+constexpr auto NetTcpPort    = "net/tcpPort";
+constexpr auto NetIface      = "net/iface";
+
 constexpr auto PortName      = "serial/portName";
 constexpr auto Baud          = "serial/baud";
 constexpr auto DataBits      = "serial/dataBits";
@@ -32,6 +37,7 @@ constexpr auto AutoDetection = "auto/detection";
 constexpr auto AutoTimeoutMode = "auto/timeoutMode"; // 0 auto 1 manual
 constexpr auto AutoTimeoutMs = "auto/timeoutMs";
 constexpr auto AutoCommandId = "auto/commandId";
+constexpr auto AutoPlaylistIds = "auto/playlistIds";
 constexpr auto AutoRecentIds = "auto/recentIds";
 constexpr auto AutoFavoriteIds = "auto/favoriteIds";
 constexpr auto AutoStopMode  = "auto/stopMode";      // 0 count 1 duration

@@ -64,6 +64,8 @@ void SettingsPage::buildUi()
 
     auto *logGroup = new QGroupBox(QStringLiteral("日志设置"), this);
     auto *form = new QFormLayout(logGroup);
+    logGroup->setMaximumWidth(960);
+    form->setVerticalSpacing(16);
 
     auto *dirRow = new QHBoxLayout;
     m_dirEdit = new QLineEdit(logGroup);
@@ -78,8 +80,8 @@ void SettingsPage::buildUi()
     form->addRow(QString(), m_fullLogCheck);
 
     m_hint = new QLabel(QStringLiteral(
-        "说明：统计汇总(summary.csv)与异常明细(exception_*.csv)默认始终保存；\n"
-        "全量日志(full_*.csv)体积大，仅在勾选后保存，采用后台线程异步写入，不影响发送与界面。"), logGroup);
+        "统计汇总与异常明细会自动保存。\n"
+        "全量日志包含每轮收发内容，长时间测试会产生较大文件，按需开启即可。"), logGroup);
     m_hint->setWordWrap(true);
     m_hint->setStyleSheet(QStringLiteral("color: gray;"));
     form->addRow(QString(), m_hint);

@@ -18,11 +18,15 @@ CommandEditDialog::CommandEditDialog(QWidget *parent)
     : QDialog(parent)
 {
     setWindowTitle(QStringLiteral("编辑指令"));
-    setMinimumWidth(520);
+    setMinimumWidth(640);
+    resize(720, 620);
 
     auto *root = new QVBoxLayout(this);
+    root->setContentsMargins(20, 16, 20, 16);
     auto *form = new QFormLayout;
     form->setLabelAlignment(Qt::AlignRight);
+    form->setVerticalSpacing(10);
+    form->setHorizontalSpacing(14);
 
     m_id = new QLineEdit(this);
     m_protocol = new QComboBox(this);
@@ -40,12 +44,16 @@ CommandEditDialog::CommandEditDialog(QWidget *parent)
     m_sendFormat->addItem(QStringLiteral("HEX"), QStringLiteral("hex"));
     m_sendFormat->addItem(QStringLiteral("ASCII"), QStringLiteral("ascii"));
     m_sendData = new QLineEdit(this);
+    m_sendData->setProperty("role", "code");
+    m_sendData->setMinimumHeight(28);
     m_bcc = new QCheckBox(QStringLiteral("自动追加 BCC（仅 HEX 有效）"), this);
 
     m_replyFormat = new QComboBox(this);
     m_replyFormat->addItem(QStringLiteral("HEX"), QStringLiteral("hex"));
     m_replyFormat->addItem(QStringLiteral("ASCII"), QStringLiteral("ascii"));
     m_reply = new QLineEdit(this);
+    m_reply->setProperty("role", "code");
+    m_reply->setMinimumHeight(28);
     m_fillReplyButton = new QPushButton(QStringLiteral("填入最近接收"), this);
     auto *replyRow = new QHBoxLayout;
     replyRow->addWidget(m_reply, 1);
@@ -69,12 +77,15 @@ CommandEditDialog::CommandEditDialog(QWidget *parent)
     form->addRow(QString(), m_enabled);
     form->addRow(QStringLiteral("备注"), m_remark);
     auto *timeoutHint = new QLabel(
-        QStringLiteral("超时在「自动发送」页设置，本表单不再配置。"), this);
+        QStringLiteral("超时时间在「自动测试 → 测试设置」中调整。"), this);
     timeoutHint->setStyleSheet(QStringLiteral("color:#666;"));
     form->addRow(QString(), timeoutHint);
     root->addLayout(form);
 
     auto *buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
+    buttons->button(QDialogButtonBox::Ok)->setText(QStringLiteral("保存指令"));
+    buttons->button(QDialogButtonBox::Ok)->setProperty("role", "primary");
+    buttons->button(QDialogButtonBox::Cancel)->setText(QStringLiteral("取消"));
     root->addWidget(buttons);
     connect(buttons, &QDialogButtonBox::accepted, this, &CommandEditDialog::validateAndAccept);
     connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);

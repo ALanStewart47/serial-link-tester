@@ -3,6 +3,8 @@
 #include "core/TestStatistics.h"
 
 #include <QString>
+#include <QStringList>
+#include <QVector>
 
 // 合格判定（只读现有统计口径，不另立公式）。压测模式不判定。
 namespace TestVerdict {
@@ -41,6 +43,43 @@ inline Result evaluate(const TestStatistics &s, bool detectionEnabled,
                    .arg(minSuccessPercent, 0, 'f', 2)
                    .arg(s.lossRateText())
                    .arg(maxLossPercent, 0, 'f', 2);
+    return r;
+}
+
+struct NamedStats {
+    QString name;
+    TestStatistics stats;
+};
+
+// 整体合格线 + 分指令合格线：任一条已发送指令未达门槛则不合格，
+// 避免总成功率把某条指令的失败平均掉（D-10）。
+inline Result evaluatePlaylist(const TestStatistics &overall,
+                               const QVector<NamedStats> &perCommand,
+                               bool detectionEnabled,
+                               double minSuccessPercent,
+                               double maxLossPercent)
+{
+    Result r = evaluate(overall, detectionEnabled, minSuccessPercent, maxLossPercent);
+    if (r.kind != Kind::Pass && r.kind != Kind::Fail) {
+        return r;
+    }
+    QStringList failed;
+    for (const NamedStats &row : perCommand) {
+        if (row.stats.sendCount() == 0) {
+            continue;
+        }
+        const Result sr = evaluate(row.stats, detectionEnabled,
+                                   minSuccessPercent, maxLossPercent);
+        if (sr.kind == Kind::Fail) {
+            failed << row.name;
+        }
+    }
+    if (!failed.isEmpty()) {
+        r.kind = Kind::Fail;
+        r.label = QStringLiteral("不合格");
+        r.detail = QStringLiteral("指令未达合格线：%1。整体：%2")
+                       .arg(failed.join(QStringLiteral("、")), r.detail);
+    }
     return r;
 }
 

@@ -2,7 +2,7 @@
 
 #include "core/AppConfig.h"
 #include "core/PacketBuilder.h"
-#include "core/SerialTransport.h"
+#include "core/IByteTransport.h"
 
 #include <QCheckBox>
 #include <QComboBox>
@@ -22,17 +22,17 @@ namespace {
 constexpr int kMaxMonitorBlocks = 1000;
 }
 
-BasicSerialPage::BasicSerialPage(SerialTransport *transport, QWidget *parent)
+BasicSerialPage::BasicSerialPage(IByteTransport *transport, QWidget *parent)
     : QWidget(parent)
     , m_transport(transport)
 {
     buildUi();
     loadSettings();
 
-    connect(m_transport, &SerialTransport::bytesReceived, this, &BasicSerialPage::onBytesReceived);
-    connect(m_transport, &SerialTransport::bytesSent, this, &BasicSerialPage::onBytesSent);
-    connect(m_transport, &SerialTransport::portStateChanged, this, &BasicSerialPage::onPortStateChanged);
-    connect(m_transport, &SerialTransport::offline, this, &BasicSerialPage::onOffline);
+    connect(m_transport, &IByteTransport::bytesReceived, this, &BasicSerialPage::onBytesReceived);
+    connect(m_transport, &IByteTransport::bytesSent, this, &BasicSerialPage::onBytesSent);
+    connect(m_transport, &IByteTransport::portStateChanged, this, &BasicSerialPage::onPortStateChanged);
+    connect(m_transport, &IByteTransport::offline, this, &BasicSerialPage::onOffline);
 
     connect(m_displayFormatCombo, &QComboBox::currentIndexChanged, this, &BasicSerialPage::saveSettings);
     connect(m_timestampCheck, &QCheckBox::toggled, this, &BasicSerialPage::saveSettings);
@@ -75,13 +75,15 @@ void BasicSerialPage::buildUi()
 
     m_monitor = new QPlainTextEdit(monitorGroup);
     m_monitor->setReadOnly(true);
+    m_monitor->setPlaceholderText(QStringLiteral("等待收发数据…\n请先在顶部连接设备，然后手动发送或启动自动测试。"));
     m_monitor->setMaximumBlockCount(kMaxMonitorBlocks);
     m_monitor->setStyleSheet(QStringLiteral("font-family: Consolas, monospace;"));
     monitorLayout->addWidget(m_monitor, 1);
     root->addWidget(monitorGroup, 1);
 
     auto *sendGroup = new QGroupBox(QStringLiteral("手动发送"), this);
-    auto *sendLayout = new QHBoxLayout(sendGroup);
+    auto *sendLayout = new QVBoxLayout(sendGroup);
+    auto *sendOptions = new QHBoxLayout;
     m_sendEdit = new QLineEdit(sendGroup);
     m_sendEdit->setPlaceholderText(QStringLiteral("HEX 例：CA 01 01 00 FF    ASCII 例：CST#（支持转义 \\r \\n \\t \\xNN）"));
     m_sendFormatCombo = new QComboBox(sendGroup);
@@ -90,10 +92,17 @@ void BasicSerialPage::buildUi()
     m_bccCheck = new QCheckBox(QStringLiteral("自动追加 BCC"), sendGroup);
     m_sendButton = new QPushButton(QStringLiteral("发送"), sendGroup);
 
-    sendLayout->addWidget(m_sendEdit, 1);
-    sendLayout->addWidget(m_sendFormatCombo);
-    sendLayout->addWidget(m_bccCheck);
-    sendLayout->addWidget(m_sendButton);
+    m_sendEdit->setMinimumHeight(32);
+    m_sendEdit->setProperty("role", "code");
+    m_sendButton->setProperty("role", "primary");
+    m_sendButton->setMinimumWidth(110);
+    m_sendButton->setText(QStringLiteral("发送 ↵"));
+    sendLayout->addWidget(m_sendEdit);
+    sendOptions->addWidget(m_sendFormatCombo);
+    sendOptions->addWidget(m_bccCheck);
+    sendOptions->addStretch();
+    sendOptions->addWidget(m_sendButton);
+    sendLayout->addLayout(sendOptions);
     root->addWidget(sendGroup);
 
     connect(m_sendButton, &QPushButton::clicked, this, &BasicSerialPage::sendManual);
@@ -112,8 +121,8 @@ void BasicSerialPage::sendManual()
         return;
     }
     if (!m_transport->isOpen()) {
-        QMessageBox::warning(this, QStringLiteral("串口未打开"),
-                             QStringLiteral("请先用窗口顶部的连接条打开串口再发送。"));
+        QMessageBox::warning(this, QStringLiteral("未连接"),
+                             QStringLiteral("请先用窗口顶部的连接条打开串口或网口再发送。"));
         return;
     }
 
@@ -174,7 +183,7 @@ void BasicSerialPage::onPortStateChanged(bool)
 
 void BasicSerialPage::onOffline(const QString &reason)
 {
-    QMessageBox::warning(this, QStringLiteral("串口断开"), reason);
+    QMessageBox::warning(this, QStringLiteral("连接断开"), reason);
 }
 
 void BasicSerialPage::onSendFormatChanged()

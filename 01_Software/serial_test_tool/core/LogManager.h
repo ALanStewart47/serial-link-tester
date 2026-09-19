@@ -42,8 +42,10 @@ public:
     void endSession(const QString &summaryText);
 
     // 运行期记录
-    void logRound(quint64 index, AutoSendEngine::Outcome outcome, qint64 respMs, const QByteArray &actual);
-    void logException(quint64 index, bool timeout, const QByteArray &actual);
+    void logRound(quint64 index, AutoSendEngine::Outcome outcome, qint64 respMs,
+                  const QByteArray &actual, const QString &commandName);
+    void logException(quint64 index, bool timeout, const QByteArray &actual,
+                      const QString &commandName);
 
 signals:
     void writeLinesRequested(const QString &path, const QStringList &lines);

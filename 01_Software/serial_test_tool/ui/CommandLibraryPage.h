@@ -3,7 +3,7 @@
 #include <QWidget>
 
 class CommandLibrary;
-class SerialTransport;
+class IByteTransport;
 
 class QLineEdit;
 class QPushButton;
@@ -18,7 +18,7 @@ class CommandLibraryPage : public QWidget
     Q_OBJECT
 
 public:
-    CommandLibraryPage(CommandLibrary *library, SerialTransport *transport, QWidget *parent = nullptr);
+    CommandLibraryPage(CommandLibrary *library, IByteTransport *transport, QWidget *parent = nullptr);
 
 private slots:
     void reload();
@@ -40,7 +40,7 @@ private:
     bool matchesFilter(const QString &commandId) const;
 
     CommandLibrary *m_library = nullptr;
-    SerialTransport *m_transport = nullptr;
+    IByteTransport *m_transport = nullptr;
 
     QLineEdit *m_searchEdit = nullptr;
     QTreeWidget *m_tree = nullptr;

@@ -4,11 +4,12 @@
 #include "core/CommandItem.h"
 #include "core/CommandLibrary.h"
 #include "core/PacketBuilder.h"
-#include "core/SerialTransport.h"
+#include "core/IByteTransport.h"
 #include "ui/CommandEditDialog.h"
 
 #include <QBrush>
 #include <QFileDialog>
+#include <QFileInfo>
 #include <QHash>
 #include <QHBoxLayout>
 #include <QHeaderView>
@@ -29,7 +30,7 @@ const QStringList kGroupOrder = {QStringLiteral("digital"), QStringLiteral("stro
                                  QStringLiteral("common"), QStringLiteral("program")};
 } // namespace
 
-CommandLibraryPage::CommandLibraryPage(CommandLibrary *library, SerialTransport *transport, QWidget *parent)
+CommandLibraryPage::CommandLibraryPage(CommandLibrary *library, IByteTransport *transport, QWidget *parent)
     : QWidget(parent)
     , m_library(library)
     , m_transport(transport)
@@ -51,10 +52,13 @@ void CommandLibraryPage::buildUi()
     bar->addWidget(new QLabel(QStringLiteral("搜索"), this));
     m_searchEdit = new QLineEdit(this);
     m_searchEdit->setPlaceholderText(QStringLiteral("按名称 / 编号 / 发送内容 / 备注过滤"));
+    m_searchEdit->setClearButtonEnabled(true);
     bar->addWidget(m_searchEdit, 1);
+    root->addLayout(bar);
+    bar = new QHBoxLayout;
 
     m_sendButton = new QPushButton(QStringLiteral("单发"), this);
-    m_sendButton->setToolTip(QStringLiteral("把选中指令立即发送一次（需先用顶部连接条打开串口）"));
+    m_sendButton->setToolTip(QStringLiteral("把选中指令立即发送一次（需先用顶部连接条打开串口或网口）"));
     m_fillExpectedButton = new QPushButton(QStringLiteral("填入最近接收"), this);
     m_fillExpectedButton->setToolTip(QStringLiteral("把最近一包接收写入选中指令的正确回复（内置指令请先复制）"));
     m_addButton = new QPushButton(QStringLiteral("新增"), this);
@@ -62,14 +66,19 @@ void CommandLibraryPage::buildUi()
     m_editButton = new QPushButton(QStringLiteral("修改"), this);
     m_deleteButton = new QPushButton(QStringLiteral("删除"), this);
     m_importButton = new QPushButton(QStringLiteral("导入"), this);
+    m_importButton->setToolTip(QStringLiteral("从 JSON 或 CSV 合并导入（ID 冲突自动改名）"));
     m_exportButton = new QPushButton(QStringLiteral("导出"), this);
+    m_exportButton->setToolTip(QStringLiteral("导出当前全部指令为 JSON 或 CSV（CSV 可用 Excel/WPS 编辑）"));
     m_restoreButton = new QPushButton(QStringLiteral("恢复默认"), this);
+    m_addButton->setProperty("role", "primary");
+    m_deleteButton->setProperty("role", "danger");
     bar->addWidget(m_sendButton);
     bar->addWidget(m_fillExpectedButton);
     bar->addWidget(m_addButton);
     bar->addWidget(m_copyButton);
     bar->addWidget(m_editButton);
     bar->addWidget(m_deleteButton);
+    bar->addStretch();
     bar->addWidget(m_importButton);
     bar->addWidget(m_exportButton);
     bar->addWidget(m_restoreButton);
@@ -81,10 +90,12 @@ void CommandLibraryPage::buildUi()
                              QStringLiteral("正确回复"), QStringLiteral("说明"),
                              QStringLiteral("状态")});
     m_tree->header()->setSectionResizeMode(0, QHeaderView::Interactive);
-    m_tree->setColumnWidth(0, 240);
+    m_tree->setColumnWidth(0, 265);
     m_tree->setColumnWidth(1, 180);
     m_tree->setColumnWidth(2, 140);
-    m_tree->setColumnWidth(3, 220);
+    m_tree->setColumnWidth(3, 240);
+    m_tree->setUniformRowHeights(true);
+    m_tree->setSelectionBehavior(QAbstractItemView::SelectRows);
     m_tree->setAlternatingRowColors(true);
     root->addWidget(m_tree, 1);
 
@@ -176,6 +187,7 @@ void CommandLibraryPage::reload()
         if (item.builtin) status += QStringLiteral("内置");
         if (!item.enabled) status += status.isEmpty() ? QStringLiteral("禁用") : QStringLiteral("·禁用");
         leaf->setText(4, status);
+        for (int c = 0; c < 5; ++c) leaf->setToolTip(c, leaf->text(c));
         leaf->setData(0, kIdRole, item.commandId);
         if (!item.enabled) {
             for (int c = 0; c < m_tree->columnCount(); ++c) {
@@ -185,6 +197,8 @@ void CommandLibraryPage::reload()
         ++shown;
     }
 
+    if (m_tree->topLevelItemCount() > 0)
+        m_tree->topLevelItem(0)->setSizeHint(0, QSize(0, 30));
     m_tree->expandAll();
     Q_UNUSED(shown);
 }
@@ -319,7 +333,7 @@ void CommandLibraryPage::restoreDefaults()
 void CommandLibraryPage::importLibrary()
 {
     const QString path = QFileDialog::getOpenFileName(this, QStringLiteral("导入指令库"),
-        QString(), QStringLiteral("指令库 JSON (*.json);;所有文件 (*.*)"));
+        QString(), QStringLiteral("指令库 (*.json *.csv);;JSON (*.json);;CSV (*.csv);;所有文件 (*.*)"));
     if (path.isEmpty()) {
         return;
     }
@@ -335,10 +349,18 @@ void CommandLibraryPage::importLibrary()
 
 void CommandLibraryPage::exportLibrary()
 {
-    const QString path = QFileDialog::getSaveFileName(this, QStringLiteral("导出指令库"),
-        QStringLiteral("commands_export.json"), QStringLiteral("指令库 JSON (*.json)"));
+    QString selected = QStringLiteral("JSON (*.json)");
+    QString path = QFileDialog::getSaveFileName(this, QStringLiteral("导出指令库"),
+        QStringLiteral("commands_export.json"),
+        QStringLiteral("JSON (*.json);;CSV (*.csv)"),
+        &selected);
     if (path.isEmpty()) {
         return;
+    }
+    if (QFileInfo(path).suffix().isEmpty()) {
+        path += selected.contains(QStringLiteral("csv"), Qt::CaseInsensitive)
+                    ? QStringLiteral(".csv")
+                    : QStringLiteral(".json");
     }
     QString err;
     if (!m_library->exportToFile(path, &err)) {
@@ -357,8 +379,8 @@ void CommandLibraryPage::sendOnce()
         return;
     }
     if (!m_transport->isOpen()) {
-        QMessageBox::warning(this, QStringLiteral("串口未打开"),
-            QStringLiteral("请先用窗口顶部的连接条打开串口，再单发指令。"));
+        QMessageBox::warning(this, QStringLiteral("未连接"),
+            QStringLiteral("请先用窗口顶部的连接条打开串口或网口，再单发指令。"));
         return;
     }
     // 按指令配置生成字节：HEX(可选 BCC) / ASCII(支持转义)

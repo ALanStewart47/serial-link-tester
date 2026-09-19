@@ -2,6 +2,7 @@
 
 #include "core/AutoSendEngine.h"
 
+#include <QElapsedTimer>
 #include <QWidget>
 
 class QLabel;
@@ -20,7 +21,8 @@ public:
 
 private slots:
     void onState(AutoSendEngine::State state, const QString &text);
-    void onRoundFailed(quint64 roundIndex, bool timeout, const QByteArray &actual);
+    void onRoundFailed(quint64 roundIndex, bool timeout, const QByteArray &actual,
+                       const QString &commandName);
     void refreshSummary();
     void clearAll();
     void exportDetails();
@@ -29,9 +31,11 @@ private slots:
 private:
     void buildUi();
     void updateVerdictLabel();
+    void refreshSlotTable();
 
     AutoSendEngine *m_engine = nullptr;
     QTimer *m_refreshTimer = nullptr;
+    QElapsedTimer m_verdictClock;
 
     QLabel *m_summary = nullptr;
     QLabel *m_verdictLabel = nullptr;
@@ -40,6 +44,7 @@ private:
     RateBar *m_successBar = nullptr;
     TrendChart *m_respTrend = nullptr;
     TrendChart *m_successTrend = nullptr;
+    QTableWidget *m_slotTable = nullptr;
     QTableWidget *m_table = nullptr;
     QPushButton *m_clearButton = nullptr;
     QPushButton *m_exportButton = nullptr;

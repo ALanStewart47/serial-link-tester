@@ -87,8 +87,23 @@ QString TestStatistics::successRateText() const
     return QStringLiteral("%1%").arg(successRate() * 100.0, 0, 'f', 2);
 }
 
+QString TestStatistics::minRespText() const
+{
+    return m_match == 0 ? QStringLiteral("—") : QStringLiteral("%1 ms").arg(minRespMs());
+}
+
+QString TestStatistics::avgRespText() const
+{
+    return m_match == 0 ? QStringLiteral("—") : QStringLiteral("%1 ms").arg(avgRespMs(), 0, 'f', 1);
+}
+
+QString TestStatistics::maxRespText() const
+{
+    return m_match == 0 ? QStringLiteral("—") : QStringLiteral("%1 ms").arg(maxRespMs());
+}
+
 QString TestStatistics::respText() const
 {
-    return QStringLiteral("min %1 / avg %2 / max %3")
-        .arg(minRespMs()).arg(avgRespMs(), 0, 'f', 1).arg(maxRespMs());
+    return QStringLiteral("最小 %1　平均 %2　最大 %3")
+        .arg(minRespText(), avgRespText(), maxRespText());
 }
