@@ -23,13 +23,15 @@ public:
     // 用内置默认库覆盖当前库与用户文件。
     bool restoreDefaults(QString *errorMessage = nullptr);
 
-    // 导出当前全部指令到任意 JSON 文件。
+    // 导出当前全部指令。按扩展名：.csv 为 UTF-8 CSV（带 BOM，Excel/WPS 可开），其余为 JSON。
     bool exportToFile(const QString &path, QString *errorMessage = nullptr) const;
-    // 从 JSON 文件导入并合并（导入项 builtin=false，ID 冲突自动改名）。返回导入条数，失败返回 -1。
+    // 从 JSON 或 CSV 导入并合并（导入项 builtin=false，ID 冲突自动改名）。返回导入条数，失败返回 -1。
     int importFromFile(const QString &path, QString *errorMessage = nullptr);
 
     const QList<CommandItem> &items() const { return m_items; }
+
     const CommandItem *findById(const QString &commandId) const;
+
     QString userFilePath() const { return m_userFilePath; }
 
     // 增删改：成功后自动保存并发出 changed()。
@@ -48,7 +50,9 @@ signals:
     void changed();
 
 private:
-    bool loadFromResource(QString *errorMessage);
+    bool loadFromResource(QList<CommandItem> *items, QString *errorMessage) const;
+    bool commitItems(QList<CommandItem> items, QString *errorMessage);
+    bool saveItems(const QList<CommandItem> &items, QString *errorMessage) const;
     bool parseJsonArray(const QByteArray &json, QList<CommandItem> *out, QString *errorMessage) const;
     int indexOfId(const QString &commandId) const;
 

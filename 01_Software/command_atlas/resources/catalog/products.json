@@ -1,0 +1,12 @@
+{
+  "format": "command-atlas-products",
+  "schema_version": 1,
+  "products": [
+    {
+      "id": "atlas-demo-controller",
+      "name": "灯光控制器（示例产品）",
+      "description": "第一阶段示例档案。实际产品型号、固件版本与通道能力需由研发确认后录入正式库。",
+      "supported_protocols": ["new", "old", "old_ext"]
+    }
+  ]
+}

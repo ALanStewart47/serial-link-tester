@@ -19,6 +19,8 @@ QJsonObject CommandItem::toJson() const
     obj[QStringLiteral("enabled")] = enabled;
     obj[QStringLiteral("builtin")] = builtin;
     obj[QStringLiteral("remark")] = remark;
+    if (!testContext.isEmpty())
+        obj[QStringLiteral("test_context")] = testContext;
     return obj;
 }
 
@@ -32,7 +34,8 @@ CommandItem CommandItem::fromJson(const QJsonObject &obj)
     item.sendFormat = obj.value(QStringLiteral("send_format")).toString(QStringLiteral("hex"));
     item.sendData = obj.value(QStringLiteral("send_data")).toString();
     item.enableBcc = obj.value(QStringLiteral("enable_bcc")).toBool(false);
-    item.expectedReplyFormat = obj.value(QStringLiteral("expected_reply_format")).toString(QStringLiteral("hex"));
+    item.expectedReplyFormat =
+        obj.value(QStringLiteral("expected_reply_format")).toString(QStringLiteral("hex"));
     item.expectedReply = obj.value(QStringLiteral("expected_reply")).toString();
     item.matchRule = obj.value(QStringLiteral("match_rule")).toString(QStringLiteral("exact"));
     item.timeoutMode = obj.value(QStringLiteral("timeout_mode")).toString(QStringLiteral("auto"));
@@ -41,5 +44,6 @@ CommandItem CommandItem::fromJson(const QJsonObject &obj)
     item.enabled = obj.value(QStringLiteral("enabled")).toBool(true);
     item.builtin = obj.value(QStringLiteral("builtin")).toBool(false);
     item.remark = obj.value(QStringLiteral("remark")).toString();
+    item.testContext = obj.value(QStringLiteral("test_context")).toObject();
     return item;
 }

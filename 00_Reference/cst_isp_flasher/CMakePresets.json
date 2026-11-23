@@ -1,0 +1,22 @@
+{
+  "version": 6,
+  "configurePresets": [
+    {
+      "name": "qt653-mingw-debug",
+      "displayName": "Qt 6.5.3 MinGW Debug（本仓库）",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/Desktop_Qt_6_5_3_MinGW_64_bit-Debug",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_PREFIX_PATH": "D:/Qt/6.5.3/mingw_64",
+        "BUILD_TESTING": "ON"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "qt653-mingw-debug",
+      "configurePreset": "qt653-mingw-debug"
+    }
+  ]
+}

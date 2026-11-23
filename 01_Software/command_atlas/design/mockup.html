@@ -1,0 +1,503 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Command Atlas · 界面美术示意 V1</title>
+<style>
+/* ============ Command Atlas Design Tokens (per 设计规范 V1) ============ */
+:root{
+  --bg-app:#F4F6F9; --bg-card:#FFFFFF; --bg-hover:#EEF1F6;
+  --border:#DDE3EC; --border-strong:#B9C3D4;
+  --text-primary:#1C2434; --text-secondary:#5B6676; --text-disabled:#9AA4B5;
+  --primary:#2456E6; --primary-hover:#1B45C4; --primary-bg:#EAF0FE; --primary-border:#B9CCF9;
+  --ok:#16A34A; --ok-bg:#E7F6EC;
+  --warn:#C77400; --warn-bg:#FBF0DC;
+  --err:#DC2626; --err-bg:#FCEBEB;
+  --offline:#B8860B; --offline-bg:#F7F0DC;
+  --frame-bg:#161B26; --frame-fixed:#2A3244; --frame-fixed-txt:#A9B4C9;
+  --frame-computed:#3B2E7A; --frame-computed-txt:#C4B5FD;
+  --frame-sel:#0EA5A5;
+  --mono:Consolas,"Cascadia Mono","JetBrains Mono",monospace;
+  --ui:"Microsoft YaHei UI","Microsoft YaHei","PingFang SC",sans-serif;
+  --radius-card:8px; --radius-ctl:6px; --radius-chip:4px; --radius-badge:10px;
+}
+*{box-sizing:border-box; margin:0; padding:0;}
+body{
+  font-family:var(--ui); font-size:13px; color:var(--text-primary);
+  background:var(--bg-app); padding:24px; line-height:1.5;
+}
+/* 顶部说明条 */
+.mock-head{max-width:1240px; margin:0 auto 16px;}
+.mock-head h1{font-size:18px; font-weight:600; display:flex; align-items:center; gap:10px;}
+.mock-head h1 .logo{
+  width:28px;height:28px;border-radius:7px;background:var(--primary);
+  display:inline-flex;align-items:center;justify-content:center;color:#fff;font-size:15px;
+}
+.mock-head p{color:var(--text-secondary); margin-top:4px;}
+.tabs{display:flex; gap:8px; margin-top:14px;}
+.tabs button{
+  font-family:var(--ui); font-size:13px; padding:7px 16px; border-radius:var(--radius-ctl);
+  border:1px solid var(--border); background:#fff; color:var(--text-secondary); cursor:pointer;
+}
+.tabs button.active{background:var(--primary); border-color:var(--primary); color:#fff;}
+/* 窗口画布 */
+.window{
+  max-width:1240px; margin:0 auto; background:var(--bg-card);
+  border:1px solid var(--border); border-radius:var(--radius-card); overflow:hidden;
+}
+.win-titlebar{
+  height:34px; background:#EDF1F7; border-bottom:1px solid var(--border);
+  display:flex; align-items:center; padding:0 14px; gap:8px;
+  font-size:12px; color:var(--text-secondary);
+}
+.win-titlebar .dot{width:10px;height:10px;border-radius:50%;background:var(--border-strong);}
+.win-titlebar .dot:first-child{background:#E8A1A1;} .win-titlebar .dot:nth-child(2){background:#EACD8B;} .win-titlebar .dot:nth-child(3){background:#A9D8B0;}
+.page{display:none;} .page.active{display:block;}
+
+/* ============ 通用控件 ============ */
+.btn{
+  display:inline-flex; align-items:center; gap:6px; height:32px; padding:0 14px;
+  border-radius:var(--radius-ctl); border:1px solid transparent; font-size:13px; cursor:pointer;
+  font-family:var(--ui);
+}
+.btn-primary{background:var(--primary); color:#fff;} .btn-primary:hover{background:var(--primary-hover);}
+.btn-outline{background:#fff; border-color:var(--primary); color:var(--primary);}
+.btn-ghost{background:transparent; color:var(--text-secondary);}
+.btn-big{height:40px; padding:0 20px; font-size:13.5px;}
+.btn svg{width:15px;height:15px;}
+.badge{
+  display:inline-flex; align-items:center; gap:5px; height:20px; padding:0 9px;
+  border-radius:var(--radius-badge); font-size:11.5px; font-weight:500; white-space:nowrap;
+}
+.badge .pt{width:6px;height:6px;border-radius:50%;background:currentColor;}
+.badge-L0{background:var(--ok-bg); color:var(--ok);}
+.badge-L1{background:var(--primary-bg); color:var(--primary);}
+.badge-L2{background:var(--warn-bg); color:var(--warn);}
+.badge-L3{background:var(--err-bg); color:var(--err);}
+.badge-sync-ok{background:var(--ok-bg); color:var(--ok);}
+.badge-sync-warn{background:var(--warn-bg); color:var(--warn);}
+.badge-sync-err{background:var(--err-bg); color:var(--err);}
+.badge-sync-info{background:var(--primary-bg); color:var(--primary);}
+select,input[type=text]{
+  height:32px; border:1px solid var(--border); border-radius:var(--radius-ctl);
+  padding:0 10px; font-family:var(--ui); font-size:13px; color:var(--text-primary); background:#fff;
+}
+input[type=text]:focus,select:focus{outline:none; border-color:var(--primary); box-shadow:0 0 0 3px var(--primary-bg);}
+.mono{font-family:var(--mono);}
+.sec-title{font-size:11px; font-weight:600; color:var(--text-secondary); letter-spacing:.05em; margin-bottom:8px; text-transform:uppercase;}
+
+/* ============ 页1 查询/组帧 ============ */
+.topbar{
+  display:flex; align-items:center; gap:10px; padding:10px 16px;
+  border-bottom:1px solid var(--border); background:#fff;
+}
+.brand{display:flex; align-items:center; gap:8px; font-size:14px; font-weight:600; margin-right:8px;}
+.brand .logo{width:22px;height:22px;border-radius:6px;background:var(--primary);color:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:12px;}
+.ctxbar{display:flex; gap:8px; flex:1;}
+.topbar .right{display:flex; align-items:center; gap:10px;}
+.search-row{padding:14px 16px 10px; display:flex; gap:12px; align-items:stretch;}
+.searchbox{
+  flex:1; height:40px; border:1px solid var(--border); border-radius:8px; background:#fff;
+  display:flex; align-items:center; gap:10px; padding:0 14px; font-size:14px; color:var(--text-primary);
+}
+.searchbox svg{width:17px;height:17px;color:var(--text-disabled);}
+.searchbox .hint{color:var(--text-disabled);}
+.main3{display:grid; grid-template-columns:32% 44% 24%; gap:0; min-height:520px;}
+.col{border-right:1px solid var(--border); padding:12px 14px;}
+.col:last-child{border-right:none;}
+.result-item{
+  border:1px solid var(--border); border-radius:var(--radius-card); padding:10px 12px; margin-bottom:8px; background:#fff;
+}
+.result-item.selected{border-color:var(--primary); background:var(--primary-bg);}
+.result-item .r1{display:flex; align-items:center; justify-content:space-between; margin-bottom:3px;}
+.result-item .name{font-size:13.5px; font-weight:600;}
+.result-item .proto{font-family:var(--mono); font-size:11.5px; color:var(--text-secondary);}
+.result-item .why{font-size:11.5px; color:var(--text-secondary); margin-top:4px;}
+.result-item .why b{color:var(--primary); font-weight:500;}
+.detail-head{display:flex; align-items:center; gap:10px; margin-bottom:6px;}
+.detail-head h2{font-size:14px; font-weight:600;}
+.detail-desc{font-size:12.5px; color:var(--text-secondary); margin-bottom:12px;}
+.param-row{display:flex; align-items:center; gap:10px; margin-bottom:10px;}
+.param-row label{width:64px; font-size:13px; color:var(--text-primary);}
+.param-row input{width:120px;}
+.param-row .rng{font-size:11.5px; color:var(--text-disabled); font-family:var(--mono);}
+/* 字节地图 */
+.frame-view{
+  background:var(--frame-bg); border-radius:var(--radius-card); padding:14px 14px 10px; margin:12px 0 8px;
+}
+.frame-bytes{display:flex; gap:5px; flex-wrap:wrap; font-family:var(--mono);}
+.byte{
+  min-width:34px; height:34px; border-radius:var(--radius-chip); display:inline-flex;
+  align-items:center; justify-content:center; font-size:13px; font-weight:700;
+}
+.byte.fixed{background:var(--frame-fixed); color:var(--frame-fixed-txt);}
+.byte.param{background:var(--primary); color:#fff; box-shadow:0 0 0 2px rgba(36,86,230,.25);}
+.byte.computed{background:var(--frame-computed); color:var(--frame-computed-txt);}
+.frame-strip{display:flex; gap:5px; margin-top:6px; font-size:10.5px; color:var(--frame-fixed-txt); font-family:var(--mono);}
+.frame-strip span{min-width:34px; text-align:center;}
+.frame-strip .p{color:#8FB0FF;} .frame-strip .c{color:var(--frame-computed-txt);}
+.frame-legend{display:flex; gap:14px; margin-top:10px; font-size:11px; color:var(--frame-fixed-txt);}
+.frame-legend i{display:inline-block;width:9px;height:9px;border-radius:3px;margin-right:5px;vertical-align:-1px;}
+.frame-legend .i1{background:var(--frame-fixed);} .frame-legend .i2{background:var(--primary);} .frame-legend .i3{background:var(--frame-computed);}
+.readable{
+  background:var(--bg-app); border:1px solid var(--border); border-radius:var(--radius-ctl);
+  padding:8px 12px; font-size:12px; color:var(--text-secondary); margin-bottom:12px;
+}
+.readable b{color:var(--text-primary); font-weight:600;}
+.action-row{display:flex; gap:8px; align-items:center;}
+.side-list{border:1px solid var(--border); border-radius:var(--radius-card); padding:10px 12px; margin-bottom:12px; background:#fff;}
+.side-list .li{display:flex; align-items:center; gap:7px; font-size:12.5px; padding:5px 0; color:var(--text-primary);}
+.side-list .li svg{width:14px;height:14px;color:var(--text-disabled);}
+.side-list .li.dim{color:var(--text-secondary);}
+.data-card{font-family:var(--mono); font-size:11.5px; color:var(--text-secondary); line-height:1.9;}
+.data-card b{color:var(--text-primary); font-weight:500;}
+
+/* ============ 页2 研发录入 ============ */
+.draftbar{
+  display:flex; align-items:center; gap:12px; padding:10px 16px; border-bottom:1px solid var(--border); background:#fff; font-size:13px;
+}
+.draftbar .draft-name{font-weight:600;}
+.draftbar .meta{font-family:var(--mono); font-size:11.5px; color:var(--text-secondary);}
+.draftbar .sp{flex:1;}
+.editor3{display:grid; grid-template-columns:200px 1fr 330px; min-height:540px;}
+.col-tree{border-right:1px solid var(--border); padding:12px; background:#FBFCFE;}
+.tree-group{font-size:11px; font-weight:600; color:var(--text-secondary); margin:8px 0 4px;}
+.tree-item{display:flex; align-items:center; gap:6px; padding:5px 8px; border-radius:var(--radius-ctl); font-size:12.5px;}
+.tree-item.sel{background:var(--primary-bg); color:var(--primary); font-weight:500;}
+.tree-item .dirty{width:7px;height:7px;border-radius:50%;background:var(--warn); margin-left:auto;}
+.col-form{padding:14px 16px; border-right:1px solid var(--border);}
+.form-tabs{display:flex; gap:2px; border-bottom:1px solid var(--border); margin-bottom:14px;}
+.form-tabs span{padding:6px 12px; font-size:12.5px; color:var(--text-secondary); border-bottom:2px solid transparent;}
+.form-tabs span.on{color:var(--primary); border-color:var(--primary); font-weight:500;}
+.seg-table{width:100%; border-collapse:collapse; font-size:12.5px; margin-bottom:12px;}
+.seg-table th{font-size:11px; color:var(--text-secondary); text-align:left; padding:5px 8px; font-weight:600; border-bottom:1px solid var(--border);}
+.seg-table td{padding:7px 8px; border-bottom:1px solid var(--border);}
+.seg-table .off{color:var(--text-disabled); font-family:var(--mono); font-size:11.5px;}
+.tag{display:inline-block; padding:1px 8px; border-radius:var(--radius-badge); font-size:11px; font-weight:500;}
+.tag.fixed{background:var(--bg-hover); color:var(--text-secondary);}
+.tag.param{background:var(--primary-bg); color:var(--primary);}
+.tag.comp{background:#EFEAFD; color:#6D4FD0;}
+.add-seg{font-size:12px; color:var(--primary); background:none; border:1px dashed var(--primary-border); border-radius:var(--radius-ctl); padding:6px 12px; cursor:pointer; font-family:var(--ui);}
+.col-preview{padding:14px; background:#FBFCFE;}
+.vec-row{
+  display:flex; align-items:center; gap:8px; padding:7px 10px; border:1px solid var(--border);
+  border-radius:var(--radius-ctl); margin-bottom:6px; font-size:12px; background:#fff;
+}
+.vec-row .st{width:16px; height:16px; border-radius:50%; display:inline-flex; align-items:center; justify-content:center; color:#fff; font-size:10px; flex:none;}
+.vec-row .st.ok{background:var(--ok);} .vec-row .st.bad{background:var(--err);}
+.vec-row .m{font-family:var(--mono); color:var(--text-secondary); font-size:11.5px;}
+.l3-row{background:var(--err-bg); border:1px solid #F2C6C6; border-radius:var(--radius-ctl); padding:7px 10px; font-size:12px; color:var(--err); margin-bottom:10px;}
+
+/* ============ 页3 同步设置 ============ */
+.sync-page{padding:18px 20px; max-width:860px;}
+.sync-card{border:1px solid var(--border); border-radius:var(--radius-card); padding:18px 20px; margin-bottom:14px; background:#fff;}
+.sync-status-big{display:flex; align-items:center; gap:14px; margin-bottom:6px;}
+.sync-dot{width:14px; height:14px; border-radius:50%; background:var(--ok); box-shadow:0 0 0 4px var(--ok-bg);}
+.sync-status-big h2{font-size:15px; font-weight:600;}
+.sync-meta{font-family:var(--mono); font-size:12px; color:var(--text-secondary); line-height:2;}
+.sync-meta b{color:var(--text-primary); font-weight:500;}
+.cfg-grid{display:grid; grid-template-columns:120px 1fr; gap:10px 12px; align-items:center; font-size:13px;}
+.cfg-grid label{color:var(--text-secondary);}
+.snap-table{width:100%; border-collapse:collapse; font-size:12.5px;}
+.snap-table th{font-size:11px; color:var(--text-secondary); text-align:left; padding:6px 8px; border-bottom:1px solid var(--border); font-weight:600;}
+.snap-table td{padding:8px; border-bottom:1px solid var(--border); font-family:var(--mono); font-size:11.5px;}
+.snap-table td:first-child{font-family:var(--ui);}
+.snap-table tr.active td{background:var(--primary-bg);}
+.mini-btn{height:26px; padding:0 10px; font-size:12px; border-radius:var(--radius-ctl); border:1px solid var(--border); background:#fff; color:var(--text-secondary); cursor:pointer; font-family:var(--ui);}
+.mini-btn.primary{border-color:var(--primary); color:var(--primary);}
+.log-view{
+  background:var(--frame-bg); color:#9AA6BD; border-radius:var(--radius-card); padding:10px 12px;
+  font-family:var(--mono); font-size:11px; line-height:1.8; height:110px; overflow:auto;
+}
+.log-view .t{color:#5E6B85;}
+.log-view .ok{color:#6FCF97;} .log-view .err{color:#F19B9B;}
+details summary{cursor:pointer; font-size:13px; color:var(--primary); margin-bottom:8px;}
+.footnote{max-width:1240px; margin:14px auto 0; font-size:11.5px; color:var(--text-disabled); line-height:1.8;}
+</style>
+</head>
+<body>
+
+<div class="mock-head">
+  <h1><span class="logo">⌖</span>Command Atlas · 界面美术示意 V1</h1>
+  <p>依据《Command_Atlas_界面美术设计规范_V1》：工程图集风 · Atlas 蓝 #2456E6 · 字节地图为标志性组件 · 与串口/诊断工具同族</p>
+  <div class="tabs">
+    <button class="active" onclick="showTab(0,this)">① 查询 / 组帧页（售后）</button>
+    <button onclick="showTab(1,this)">② 研发录入页</button>
+    <button onclick="showTab(2,this)">③ 同步设置页</button>
+    <button onclick="showTab(3,this)">④ 色彩与组件总览</button>
+  </div>
+</div>
+
+<!-- ================= 页1：查询/组帧 ================= -->
+<div class="window page active">
+  <div class="win-titlebar"><span class="dot"></span><span class="dot"></span><span class="dot"></span>CommandAtlas.exe — 控制器指令助手</div>
+  <div class="topbar">
+    <div class="brand"><span class="logo">⌖</span>Command Atlas</div>
+    <div class="ctxbar">
+      <select><option>光源控制器 X 系列</option></select>
+      <select><option>型号：X-4008</option></select>
+      <select><option>固件：v2.3</option></select>
+      <select><option>全部协议</option></select>
+    </div>
+    <div class="right">
+      <span class="badge badge-sync-ok"><span class="pt"></span>已同步 2026.09.28.1</span>
+      <button class="btn btn-ghost">⚙ 设置</button>
+    </div>
+  </div>
+  <div class="search-row">
+    <div class="searchbox">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+      <span class="hint">搜索指令：调光 / 设亮度 / 通道3设255…</span>
+    </div>
+  </div>
+  <div class="main3">
+    <!-- 左列：结果 -->
+    <div class="col">
+      <div class="sec-title">搜索结果（2）· 匹配原因已标注</div>
+      <div class="result-item selected">
+        <div class="r1"><span class="name">设置通道亮度</span><span class="badge badge-L1"><span class="pt"></span>可恢复设置</span></div>
+        <div class="proto">新协议 · CA 01 · 6 字节</div>
+        <div class="why">匹配：别名「调光」＋意图「设置亮度」</div>
+      </div>
+      <div class="result-item">
+        <div class="r1"><span class="name">读取设备 IP</span><span class="badge badge-L0"><span class="pt"></span>只读</span></div>
+        <div class="proto">新协议 · CA 0F · 4 字节</div>
+        <div class="why">匹配：意图「查设备IP」</div>
+      </div>
+    </div>
+    <!-- 中列：详情+组帧 -->
+    <div class="col">
+      <div class="detail-head"><h2>设置通道亮度</h2><span class="badge badge-L1"><span class="pt"></span>L1 可恢复设置</span></div>
+      <div class="detail-desc">设置指定通道的亮度值。亮度范围 0~999（16 位大端），修改立即生效、断电不保存。设置后建议读回确认。</div>
+      <div class="param-row"><label>通道</label><input type="text" value="1"><span class="rng">无符号 8 位 · 1~40</span></div>
+      <div class="param-row"><label>亮度</label><input type="text" value="255"><span class="rng">无符号 16 位大端 · 0~999</span></div>
+      <div class="frame-view">
+        <div class="frame-bytes">
+          <span class="byte fixed">CA</span><span class="byte fixed">01</span>
+          <span class="byte param">01</span>
+          <span class="byte param">00</span><span class="byte param">FF</span>
+          <span class="byte computed">35</span>
+        </div>
+        <div class="frame-strip">
+          <span>帧头</span><span>命令</span><span class="p">通道</span><span class="p">亮度</span><span class="p">　</span><span class="c">BCC</span>
+        </div>
+        <div class="frame-legend"><span><i class="i1"></i>固定段</span><span><i class="i2"></i>参数段（我填的）</span><span><i class="i3"></i>计算段</span></div>
+      </div>
+      <div class="readable">帧头 <b>CA</b> · 命令 <b>01</b>（设置亮度）· 通道 <b>1</b> · 亮度 <b>255</b>（00 FF，大端）· 校验 <b>BCC=XOR(第0~4字节)=35</b></div>
+      <div class="action-row">
+        <button class="btn btn-primary btn-big">⧉ 复制 HEX</button>
+        <button class="btn btn-outline btn-big">复制 ASCII</button>
+        <button class="btn btn-ghost btn-big">导出到串口工具 ▾</button>
+      </div>
+    </div>
+    <!-- 右列：最近/收藏/数据 -->
+    <div class="col">
+      <div class="side-list">
+        <div class="sec-title">最近使用</div>
+        <div class="li">◷ 设置通道亮度 · 通道3=128</div>
+        <div class="li">◷ 读取设备 IP</div>
+      </div>
+      <div class="side-list">
+        <div class="sec-title">收藏</div>
+        <div class="li">☆ 关闭全部光源</div>
+      </div>
+      <div class="side-list">
+        <div class="sec-title">当前数据档案</div>
+        <div class="data-card">内容版本 <b>2026.09.28.1</b><br>来源提交 <b>a1b2c3d4</b><br>上次同步 <b>09-28 15:02</b><br>状态 <b>已验证 ✓</b></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ================= 页2：研发录入 ================= -->
+<div class="window page">
+  <div class="win-titlebar"><span class="dot"></span><span class="dot"></span><span class="dot"></span>CommandAtlas.exe — 研发本地录入工具</div>
+  <div class="draftbar">
+    <span class="draft-name">草稿：brightness_set_v3</span>
+    <span class="badge badge-sync-warn"><span class="pt"></span>本地未导出</span>
+    <span class="meta">基础提交 a1b2c3d4 · 修改 2 处</span>
+    <span class="sp"></span>
+    <button class="btn btn-outline">校验全部</button>
+    <button class="btn btn-primary">导出标准 JSON</button>
+  </div>
+  <div class="editor3">
+    <div class="col-tree">
+      <div class="tree-group">▾ 新协议</div>
+      <div class="tree-item sel">· 亮度设置 <span class="dirty"></span></div>
+      <div class="tree-item">· 读取版本</div>
+      <div class="tree-item">· 读取设备 IP</div>
+      <div class="tree-group">▸ 旧协议（ASCII）</div>
+      <div class="tree-group">▸ 旧扩展（$/@）</div>
+      <div style="margin-top:14px;"><button class="add-seg" style="width:100%;">＋ 新建草稿</button></div>
+      <div class="l3-row" style="margin-top:14px;">⚠ L3 破坏性指令<br>不进入公开仓库</div>
+    </div>
+    <div class="col-form">
+      <div class="form-tabs">
+        <span class="on">身份</span><span>适用性</span><span>帧段</span><span>参数</span><span>回复</span><span>风险</span><span>检索</span>
+      </div>
+      <div class="sec-title">帧段编辑器 · 起始字节自动计算</div>
+      <table class="seg-table">
+        <tr><th>#</th><th>类型</th><th>定义</th><th>起始</th><th></th></tr>
+        <tr><td class="off">0</td><td><span class="tag fixed">fixed</span></td><td class="mono">CA</td><td class="off">0</td><td>⋮</td></tr>
+        <tr><td class="off">1</td><td><span class="tag fixed">fixed</span></td><td class="mono">01</td><td class="off">1</td><td>⋮</td></tr>
+        <tr><td class="off">2</td><td><span class="tag param">param</span></td><td>channel · u8 · 1~40</td><td class="off">2</td><td>⋮</td></tr>
+        <tr><td class="off">3</td><td><span class="tag param">param</span></td><td>brightness · u16 BE · 0~999</td><td class="off">3</td><td>⋮</td></tr>
+        <tr><td class="off">4</td><td><span class="tag comp">computed</span></td><td class="mono">BCC = XOR(0..4)</td><td class="off">5</td><td>⋮</td></tr>
+      </table>
+      <button class="add-seg">＋ 添加段（固定 / 参数 / 计算）</button>
+      <div style="margin-top:18px;" class="sec-title">基本信息</div>
+      <div class="cfg-grid">
+        <label>中文名称</label><input type="text" value="设置通道亮度" style="width:220px;">
+        <label>用户意图</label><input type="text" value="设置某个通道的亮度" style="width:220px;">
+        <label>别名</label><input type="text" value="调光, 设亮度, 改亮度" style="width:220px;">
+        <label>风险等级</label><span><span class="badge badge-L1"><span class="pt"></span>L1 可恢复设置</span></span>
+      </div>
+    </div>
+    <div class="col-preview">
+      <div class="sec-title">实时预览</div>
+      <div class="frame-view" style="margin-top:0;">
+        <div class="frame-bytes">
+          <span class="byte fixed">CA</span><span class="byte fixed">01</span>
+          <span class="byte param">01</span><span class="byte param">00</span><span class="byte param">FF</span>
+          <span class="byte computed">35</span>
+        </div>
+        <div class="frame-strip"><span>帧头</span><span>命令</span><span class="p">通道</span><span class="p">亮度</span><span class="p">　</span><span class="c">BCC</span></div>
+      </div>
+      <div class="sec-title" style="margin-top:14px;">黄金测试向量（2/3 通过）</div>
+      <div class="vec-row"><span class="st ok">✓</span>通道=1, 亮度=255 <span class="m">→ CA 01 01 00 FF 35</span></div>
+      <div class="vec-row"><span class="st ok">✓</span>通道=40, 亮度=999 <span class="m">→ CA 01 28 03 E7 …</span></div>
+      <div class="vec-row"><span class="st bad">✗</span>亮度=1000 <span class="m">→ 越界，已正确拒绝</span></div>
+      <div style="display:flex; gap:8px; margin-top:8px;">
+        <button class="mini-btn primary">＋ 添加向量</button>
+        <button class="mini-btn">校验全部</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ================= 页3：同步设置 ================= -->
+<div class="window page">
+  <div class="win-titlebar"><span class="dot"></span><span class="dot"></span><span class="dot"></span>CommandAtlas.exe — 数据与同步</div>
+  <div class="sync-page">
+    <div class="sync-card">
+      <div class="sync-status-big"><span class="sync-dot"></span><h2>已同步 · 数据为最新版本</h2><span class="sp" style="flex:1;"></span><button class="btn btn-outline">立即检查更新</button></div>
+      <div class="sync-meta">
+        内容版本　<b>2026.09.28.1</b><br>
+        来源提交　<b>a1b2c3d4e5f60718…</b>（main）<br>
+        上次成功同步　<b>2026-09-28 15:02:11</b>　·　快照校验　<b>SHA-256 全部通过 ✓</b>
+      </div>
+    </div>
+    <div class="sync-card">
+      <div class="sec-title">仓库配置（部署时由管理员设置）</div>
+      <div class="cfg-grid">
+        <label>GitLab 地址</label><input type="text" value="https://gitlab.local" style="max-width:320px;">
+        <label>项目 ID</label><input type="text" value="42" style="max-width:120px;">
+        <label>分支</label><span class="mono" style="font-size:12px; color:var(--text-secondary);">main（受保护，只读）</span>
+        <label>证书</label><span style="font-size:12.5px; color:var(--text-secondary);">内部 CA 已配置，强制校验，不关闭验证</span>
+      </div>
+    </div>
+    <div class="sync-card">
+      <div class="sec-title">本地快照 · 当前激活行为蓝色高亮</div>
+      <table class="snap-table">
+        <tr><th>内容版本</th><th>来源提交</th><th>激活时间</th><th>状态</th><th></th></tr>
+        <tr class="active"><td>2026.09.28.1</td><td>a1b2c3d4</td><td>09-28 15:02</td><td>当前使用中</td><td></td></tr>
+        <tr><td>2026.09.21.3</td><td>9f8e7d6c</td><td>09-21 10:11</td><td>上一份保留</td><td><button class="mini-btn">回退到此版</button></td></tr>
+      </table>
+    </div>
+    <div class="sync-card">
+      <details>
+        <summary>同步日志（排查用，默认折叠）</summary>
+        <div class="log-view">
+          <span class="t">15:02:09</span> 查询 main 提交… 发现新提交 a1b2c3d4<br>
+          <span class="t">15:02:10</span> 下载 4 个文件（manifest / products / commands / synonyms）<br>
+          <span class="t">15:02:11</span> <span class="ok">SHA-256 校验通过，schema 兼容，黄金向量复验通过</span><br>
+          <span class="t">15:02:11</span> <span class="ok">原子激活快照 2026.09.28.1，旧快照已保留</span>
+        </div>
+      </details>
+    </div>
+  </div>
+</div>
+
+<!-- ================= 页4：色彩与组件总览 ================= -->
+<div class="window page">
+  <div class="win-titlebar"><span class="dot"></span><span class="dot"></span><span class="dot"></span>Command Atlas · Design Tokens</div>
+  <div class="sync-page" style="max-width:1100px;">
+    <div class="sync-card">
+      <div class="sec-title">中性色 + 主色</div>
+      <div style="display:flex; gap:10px; flex-wrap:wrap;" id="swatches-neutral"></div>
+    </div>
+    <div class="sync-card">
+      <div class="sec-title">风险分级徽章（L0~L3）· 同步状态（四态）</div>
+      <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
+        <span class="badge badge-L0"><span class="pt"></span>只读</span>
+        <span class="badge badge-L1"><span class="pt"></span>可恢复设置</span>
+        <span class="badge badge-L2"><span class="pt"></span>高风险设置</span>
+        <span class="badge badge-L3"><span class="pt"></span>破坏性 · 研发可见</span>
+        <span style="width:1px;height:20px;background:var(--border);"></span>
+        <span class="badge badge-sync-ok"><span class="pt"></span>已同步</span>
+        <span class="badge badge-sync-warn"><span class="pt"></span>离线 · 本地版本</span>
+        <span class="badge badge-sync-info"><span class="pt"></span>发现新版 / 同步中</span>
+        <span class="badge badge-sync-err"><span class="pt"></span>同步失败 · 已保留旧版</span>
+      </div>
+    </div>
+    <div class="sync-card">
+      <div class="sec-title">按钮三态</div>
+      <div style="display:flex; gap:10px; align-items:center;">
+        <button class="btn btn-primary btn-big">⧉ 复制 HEX（主）</button>
+        <button class="btn btn-outline">次按钮</button>
+        <button class="btn btn-ghost">文字按钮</button>
+        <button class="btn" style="background:#F3F4F6;color:var(--text-disabled);cursor:not-allowed;">禁用（越界时复制）</button>
+      </div>
+    </div>
+    <div class="sync-card">
+      <div class="sec-title">字节地图 · 帧配色（详情页与录入工具共用同一组件）</div>
+      <div class="frame-view" style="margin:0;">
+        <div class="frame-bytes">
+          <span class="byte fixed">CA</span><span class="byte fixed">01</span>
+          <span class="byte param">01</span><span class="byte param">00</span><span class="byte param">FF</span>
+          <span class="byte computed">35</span>
+        </div>
+        <div class="frame-strip"><span>帧头</span><span>命令</span><span class="p">通道</span><span class="p">亮度</span><span class="p">　</span><span class="c">BCC</span></div>
+        <div class="frame-legend"><span><i class="i1"></i>固定段 #2A3244</span><span><i class="i2"></i>参数段 #2456E6（最醒目）</span><span><i class="i3"></i>计算段 #3B2E7A</span></div>
+      </div>
+    </div>
+    <div class="sync-card">
+      <div class="sec-title">字体</div>
+      <div style="font-size:14px; font-weight:600;">页标题 / 指令中文名 · 微软雅黑 SemiBold 14pt</div>
+      <div style="margin-top:4px;">界面正文 · 微软雅黑 9pt　<span style="color:var(--text-secondary);">次要说明 · #5B6676</span></div>
+      <div class="mono" style="margin-top:6px; font-size:14px; font-weight:700;">CA 01 01 00 FF 35 · 等宽 Consolas Bold（帧 / SHA / 版本号）</div>
+    </div>
+  </div>
+</div>
+
+<p class="footnote">
+  说明：本文件为 HTML 高保真示意（静态、无功能），仅表达配色 / 布局 / 组件状态；S4 按《Command_Atlas_界面美术设计规范_V1》在 Qt Widgets 中落地（QSS 或 QPalette）。<br>
+  目标电脑零字体依赖：微软雅黑 + Consolas 均为 Windows 自带。窗口基准 1280×800，最小 1100×700。
+</p>
+
+<script>
+function showTab(i, btn){
+  document.querySelectorAll('.page').forEach((p,idx)=>p.classList.toggle('active', idx===i));
+  document.querySelectorAll('.tabs button').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+}
+// 中性色 swatches
+(function(){
+  const colors=[
+    ['bg_app','#F4F6F9'],['bg_card','#FFFFFF'],['bg_hover','#EEF1F6'],
+    ['border','#DDE3EC'],['text_primary','#1C2434'],['text_secondary','#5B6676'],
+    ['primary','#2456E6'],['primary_bg','#EAF0FE']
+  ];
+  const box=document.getElementById('swatches-neutral');
+  colors.forEach(([n,c])=>{
+    const d=document.createElement('div');
+    d.style.cssText='width:110px;';
+    d.innerHTML=`<div style="height:44px;border-radius:6px;border:1px solid var(--border);background:${c};"></div>
+      <div class="mono" style="font-size:11px;color:var(--text-secondary);margin-top:3px;">${n}<br>${c}</div>`;
+    box.appendChild(d);
+  });
+})();
+</script>
+</body>
+</html>

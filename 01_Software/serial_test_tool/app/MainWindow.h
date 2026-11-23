@@ -3,12 +3,18 @@
 #include "core/AutoSendEngine.h"
 #include "core/CommandLibrary.h"
 #include "core/LogManager.h"
-#include "core/SerialTransport.h"
+#include "core/LinkHub.h"
 
 #include <QMainWindow>
 
+class BasicSerialPage;
+class PortConnectionBar;
 class QLabel;
 class QTabWidget;
+class QTimer;
+class QCloseEvent;
+class QMessageBox;
+class ResultPage;
 
 class MainWindow : public QMainWindow
 {
@@ -16,6 +22,9 @@ class MainWindow : public QMainWindow
 
 public:
     explicit MainWindow(QWidget *parent = nullptr);
+
+protected:
+    void closeEvent(QCloseEvent *event) override;
 
 private slots:
     void onPortStateChanged(bool open);
@@ -25,13 +34,26 @@ private slots:
 
 private:
     void buildUi();
+    void beginTestLog();
+    void onLogsIdle();
+    void askAboutLogClose(const QString &failure = {});
+    void dismissLogClosePrompt();
+    void finishClose();
 
-    SerialTransport m_transport;        // 全局唯一串口对象，各页共用
-    CommandLibrary m_library;           // 全局唯一指令库，各页共用
-    AutoSendEngine m_engine{&m_transport}; // 自动发送引擎（用同一个串口）
-    LogManager m_log;                      // 异步日志
+    LinkHub m_link;
+    CommandLibrary m_library;
+    AutoSendEngine m_engine{&m_link};
+    LogManager m_log;
+    PortConnectionBar *m_portBar = nullptr;
     QTabWidget *m_tabs = nullptr;
-    QWidget *m_autoPage = nullptr;         // 运行期保持可用的页（自动发送）
-    QWidget *m_resultPage = nullptr;       // 运行期保持可用的页（结果只读）
+    BasicSerialPage *m_serialPage = nullptr;
+    QWidget *m_autoPage = nullptr;
+    ResultPage *m_resultPage = nullptr;
     QLabel *m_portStatusLabel = nullptr;
+    QLabel *m_creditLabel = nullptr;
+    QLabel *m_statusMessageLabel = nullptr;
+    QTimer *m_statusMessageTimer = nullptr;
+    QTimer *m_logExitTimer = nullptr;
+    QMessageBox *m_logClosePrompt = nullptr;
+    bool m_waitingForLogExit = false;
 };

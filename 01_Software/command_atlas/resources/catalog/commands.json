@@ -1,0 +1,250 @@
+{
+  "format": "command-atlas-commands",
+  "schema_version": 1,
+  "commands": [
+    {
+      "id": "NEW_DIG_SET_BRIGHTNESS_CH1",
+      "product_ids": ["atlas-demo-controller"],
+      "protocol": "new",
+      "category": "数字",
+      "title": "设置通道亮度",
+      "description": "设置指定通道的亮度。亮度范围受控制器亮度等级影响，最终上限需以对应设备能力为准。",
+      "aliases": ["调亮", "调暗", "修改灯光明暗"],
+      "keywords": ["灯", "输出", "强度", "255", "CA 01"],
+      "frame_format": "hex",
+      "parameters": [
+        {"id": "channel", "label": "通道", "type": "integer", "encoding": "u8", "min": 1, "max": 8, "default": 1, "unit": "路"},
+        {"id": "value", "label": "亮度", "type": "integer", "encoding": "u16be", "min": 0, "max": 999, "default": 255, "unit": ""}
+      ],
+      "segments": [
+        {"kind": "fixed", "encoding": "hex", "value": "CA 01"},
+        {"kind": "parameter", "parameter": "channel", "encoding": "u8"},
+        {"kind": "parameter", "parameter": "value", "encoding": "u16be"},
+        {"kind": "computed", "algorithm": "xor_bcc"}
+      ]
+    },
+    {
+      "id": "NEW_DIG_READ_BRIGHTNESS_CH1",
+      "product_ids": ["atlas-demo-controller"],
+      "protocol": "new",
+      "category": "数字",
+      "title": "读取通道亮度",
+      "description": "读取指定通道当前亮度。读取回复中的数值由控制器返回。",
+      "aliases": ["查询亮度", "查看当前亮度", "读回亮度"],
+      "keywords": ["灯", "输出", "强度", "CA 61"],
+      "frame_format": "hex",
+      "parameters": [
+        {"id": "channel", "label": "通道", "type": "integer", "encoding": "u8", "min": 1, "max": 8, "default": 1, "unit": "路"}
+      ],
+      "segments": [
+        {"kind": "fixed", "encoding": "hex", "value": "CA 61"},
+        {"kind": "parameter", "parameter": "channel", "encoding": "u8"},
+        {"kind": "fixed", "encoding": "hex", "value": "00 00"},
+        {"kind": "computed", "algorithm": "xor_bcc"}
+      ]
+    },
+    {
+      "id": "NEW_STR_SET_PULSE_CH1",
+      "product_ids": ["atlas-demo-controller"],
+      "protocol": "new",
+      "category": "频闪",
+      "title": "设置通道脉宽",
+      "description": "设置指定通道的脉宽，范围 0~999；时间单位由控制器的脉宽单位设置决定。",
+      "aliases": ["设置脉冲宽度", "设置灯亮时间", "设置闪光时间"],
+      "keywords": ["频闪", "曝光", "CA 21"],
+      "frame_format": "hex",
+      "parameters": [
+        {"id": "channel", "label": "通道", "type": "integer", "encoding": "u8", "min": 1, "max": 8, "default": 1, "unit": "路"},
+        {"id": "value", "label": "脉宽", "type": "integer", "encoding": "u16be", "min": 0, "max": 999, "default": 100, "unit": ""}
+      ],
+      "segments": [
+        {"kind": "fixed", "encoding": "hex", "value": "CA 21"},
+        {"kind": "parameter", "parameter": "channel", "encoding": "u8"},
+        {"kind": "parameter", "parameter": "value", "encoding": "u16be"},
+        {"kind": "computed", "algorithm": "xor_bcc"}
+      ]
+    },
+    {
+      "id": "NEW_STR_READ_PULSE_CH1",
+      "product_ids": ["atlas-demo-controller"],
+      "protocol": "new",
+      "category": "频闪",
+      "title": "读取通道脉宽",
+      "description": "读取指定通道当前脉宽；实际时间单位以控制器设置为准。",
+      "aliases": ["查询脉宽", "读取脉冲宽度", "查看灯亮时间"],
+      "keywords": ["频闪", "曝光", "CA 81"],
+      "frame_format": "hex",
+      "parameters": [
+        {"id": "channel", "label": "通道", "type": "integer", "encoding": "u8", "min": 1, "max": 8, "default": 1, "unit": "路"}
+      ],
+      "segments": [
+        {"kind": "fixed", "encoding": "hex", "value": "CA 81"},
+        {"kind": "parameter", "parameter": "channel", "encoding": "u8"},
+        {"kind": "fixed", "encoding": "hex", "value": "00 00"},
+        {"kind": "computed", "algorithm": "xor_bcc"}
+      ]
+    },
+    {
+      "id": "OLD_DIG_SET_BRIGHTNESS_A",
+      "product_ids": ["atlas-demo-controller"],
+      "protocol": "old",
+      "category": "数字",
+      "title": "设置通道亮度（旧协议）",
+      "description": "旧 ASCII 协议亮度格式为 SA0XXX#，数值范围 000~999。通道 A~H 对应第 1~8 路。",
+      "aliases": ["旧协议调亮", "旧协议调暗", "设置A路亮度"],
+      "keywords": ["ASCII", "灯", "输出", "SA0"],
+      "frame_format": "ascii",
+      "parameters": [
+        {"id": "channel", "label": "通道", "type": "integer", "encoding": "ascii_channel", "min": 1, "max": 8, "default": 1, "unit": "路"},
+        {"id": "value", "label": "亮度", "type": "integer", "encoding": "ascii_decimal", "width": 3, "min": 0, "max": 999, "default": 255, "unit": ""}
+      ],
+      "segments": [
+        {"kind": "fixed", "encoding": "ascii", "value": "S"},
+        {"kind": "parameter", "parameter": "channel", "encoding": "ascii_channel"},
+        {"kind": "fixed", "encoding": "ascii", "value": "0"},
+        {"kind": "parameter", "parameter": "value", "encoding": "ascii_decimal", "width": 3},
+        {"kind": "fixed", "encoding": "ascii", "value": "#"}
+      ]
+    },
+    {
+      "id": "OLD_DIG_READ_BRIGHTNESS_A",
+      "product_ids": ["atlas-demo-controller"],
+      "protocol": "old",
+      "category": "数字",
+      "title": "读取通道亮度（旧协议）",
+      "description": "读取旧协议指定通道当前亮度，命令以 # 结束。",
+      "aliases": ["旧协议查询亮度", "旧协议查看亮度", "读取A路亮度"],
+      "keywords": ["ASCII", "灯", "输出", "SA#"],
+      "frame_format": "ascii",
+      "parameters": [
+        {"id": "channel", "label": "通道", "type": "integer", "encoding": "ascii_channel", "min": 1, "max": 8, "default": 1, "unit": "路"}
+      ],
+      "segments": [
+        {"kind": "fixed", "encoding": "ascii", "value": "S"},
+        {"kind": "parameter", "parameter": "channel", "encoding": "ascii_channel"},
+        {"kind": "fixed", "encoding": "ascii", "value": "#"}
+      ]
+    },
+    {
+      "id": "OLD_STR_SET_PULSE_A",
+      "product_ids": ["atlas-demo-controller"],
+      "protocol": "old",
+      "category": "频闪",
+      "title": "设置通道脉宽（旧协议）",
+      "description": "旧 ASCII 协议脉宽格式为 SPA0XXX#，数值范围 000~999。",
+      "aliases": ["旧协议设置脉冲宽度", "旧协议设置灯亮时间"],
+      "keywords": ["ASCII", "频闪", "曝光", "SPA0"],
+      "frame_format": "ascii",
+      "parameters": [
+        {"id": "channel", "label": "通道", "type": "integer", "encoding": "ascii_channel", "min": 1, "max": 8, "default": 1, "unit": "路"},
+        {"id": "value", "label": "脉宽", "type": "integer", "encoding": "ascii_decimal", "width": 3, "min": 0, "max": 999, "default": 100, "unit": ""}
+      ],
+      "segments": [
+        {"kind": "fixed", "encoding": "ascii", "value": "SP"},
+        {"kind": "parameter", "parameter": "channel", "encoding": "ascii_channel"},
+        {"kind": "fixed", "encoding": "ascii", "value": "0"},
+        {"kind": "parameter", "parameter": "value", "encoding": "ascii_decimal", "width": 3},
+        {"kind": "fixed", "encoding": "ascii", "value": "#"}
+      ]
+    },
+    {
+      "id": "OLD_STR_READ_PULSE_A",
+      "product_ids": ["atlas-demo-controller"],
+      "protocol": "old",
+      "category": "频闪",
+      "title": "读取通道脉宽（旧协议）",
+      "description": "读取旧协议指定通道当前脉宽，命令以 # 结束。",
+      "aliases": ["旧协议查询脉宽", "旧协议读取脉冲宽度", "旧协议查看灯亮时间"],
+      "keywords": ["ASCII", "频闪", "曝光", "SPA#"],
+      "frame_format": "ascii",
+      "parameters": [
+        {"id": "channel", "label": "通道", "type": "integer", "encoding": "ascii_channel", "min": 1, "max": 8, "default": 1, "unit": "路"}
+      ],
+      "segments": [
+        {"kind": "fixed", "encoding": "ascii", "value": "SP"},
+        {"kind": "parameter", "parameter": "channel", "encoding": "ascii_channel"},
+        {"kind": "fixed", "encoding": "ascii", "value": "#"}
+      ]
+    },
+    {
+      "id": "EXT_SET_01_A",
+      "product_ids": ["atlas-demo-controller"],
+      "protocol": "old_ext",
+      "category": "数字",
+      "title": "设置通道亮度（旧扩展协议）",
+      "description": "旧扩展协议功能号 01 表示亮度，写帧为 $01 + 通道字母 + 四位补零数值 + #。",
+      "aliases": ["扩展协议调亮", "扩展协议调暗", "$01亮度设置"],
+      "keywords": ["ASCII", "扩展旧协议", "灯", "$01"],
+      "frame_format": "ascii",
+      "parameters": [
+        {"id": "channel", "label": "通道", "type": "integer", "encoding": "ascii_channel", "min": 1, "max": 8, "default": 1, "unit": "路"},
+        {"id": "value", "label": "亮度", "type": "integer", "encoding": "ascii_decimal", "width": 4, "min": 0, "max": 999, "default": 123, "unit": ""}
+      ],
+      "segments": [
+        {"kind": "fixed", "encoding": "ascii", "value": "$01"},
+        {"kind": "parameter", "parameter": "channel", "encoding": "ascii_channel"},
+        {"kind": "parameter", "parameter": "value", "encoding": "ascii_decimal", "width": 4},
+        {"kind": "fixed", "encoding": "ascii", "value": "#"}
+      ]
+    },
+    {
+      "id": "EXT_READ_01_A",
+      "product_ids": ["atlas-demo-controller"],
+      "protocol": "old_ext",
+      "category": "数字",
+      "title": "读取通道亮度（旧扩展协议）",
+      "description": "旧扩展协议功能号 01 表示亮度，读帧为 @01 + 通道字母 + #。",
+      "aliases": ["扩展协议查询亮度", "扩展协议查看亮度", "@01亮度读取"],
+      "keywords": ["ASCII", "扩展旧协议", "灯", "@01"],
+      "frame_format": "ascii",
+      "parameters": [
+        {"id": "channel", "label": "通道", "type": "integer", "encoding": "ascii_channel", "min": 1, "max": 8, "default": 1, "unit": "路"}
+      ],
+      "segments": [
+        {"kind": "fixed", "encoding": "ascii", "value": "@01"},
+        {"kind": "parameter", "parameter": "channel", "encoding": "ascii_channel"},
+        {"kind": "fixed", "encoding": "ascii", "value": "#"}
+      ]
+    },
+    {
+      "id": "EXT_SET_02_A",
+      "product_ids": ["atlas-demo-controller"],
+      "protocol": "old_ext",
+      "category": "频闪",
+      "title": "设置通道脉宽（旧扩展协议）",
+      "description": "旧扩展协议功能号 02 表示脉宽，写帧使用四位补零数值。",
+      "aliases": ["扩展协议设置脉冲宽度", "扩展协议设置灯亮时间", "$02脉宽设置"],
+      "keywords": ["ASCII", "扩展旧协议", "频闪", "$02"],
+      "frame_format": "ascii",
+      "parameters": [
+        {"id": "channel", "label": "通道", "type": "integer", "encoding": "ascii_channel", "min": 1, "max": 8, "default": 1, "unit": "路"},
+        {"id": "value", "label": "脉宽", "type": "integer", "encoding": "ascii_decimal", "width": 4, "min": 0, "max": 999, "default": 123, "unit": ""}
+      ],
+      "segments": [
+        {"kind": "fixed", "encoding": "ascii", "value": "$02"},
+        {"kind": "parameter", "parameter": "channel", "encoding": "ascii_channel"},
+        {"kind": "parameter", "parameter": "value", "encoding": "ascii_decimal", "width": 4},
+        {"kind": "fixed", "encoding": "ascii", "value": "#"}
+      ]
+    },
+    {
+      "id": "EXT_READ_02_A",
+      "product_ids": ["atlas-demo-controller"],
+      "protocol": "old_ext",
+      "category": "频闪",
+      "title": "读取通道脉宽（旧扩展协议）",
+      "description": "旧扩展协议功能号 02 表示脉宽，读帧为 @02 + 通道字母 + #。",
+      "aliases": ["扩展协议查询脉宽", "扩展协议读取脉冲宽度", "@02脉宽读取"],
+      "keywords": ["ASCII", "扩展旧协议", "频闪", "@02"],
+      "frame_format": "ascii",
+      "parameters": [
+        {"id": "channel", "label": "通道", "type": "integer", "encoding": "ascii_channel", "min": 1, "max": 8, "default": 1, "unit": "路"}
+      ],
+      "segments": [
+        {"kind": "fixed", "encoding": "ascii", "value": "@02"},
+        {"kind": "parameter", "parameter": "channel", "encoding": "ascii_channel"},
+        {"kind": "fixed", "encoding": "ascii", "value": "#"}
+      ]
+    }
+  ]
+}

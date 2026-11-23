@@ -1,0 +1,274 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Command Atlas · 美术定稿 V2</title>
+<style>
+:root {
+  color-scheme: light;
+  --bg: #F4F6F9; --surface: #FFFFFF; --subtle: #EEF1F6; --line: #DDE3EC;
+  --ink: #1C2434; --muted: #5B6676; --disabled: #9AA4B5;
+  --blue: #2456E6; --blue-hover: #1B45C4; --blue-soft: #EAF0FE;
+  --green: #16834A; --amber: #956000; --red: #DC2626;
+  --frame: #161B26; --fixed: #2A3244; --computed: #3B2E7A; --focus: #0EA5A5;
+  --ui: "Microsoft YaHei UI", "Microsoft YaHei", "Segoe UI", sans-serif;
+  --mono: Consolas, "Cascadia Mono", monospace;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { margin: 0; padding: 22px; color: var(--ink); background: #E9EDF3; font: 14px/1.55 var(--ui); }
+button, input, select { font: inherit; }
+button, select { cursor: pointer; }
+.review { max-width: 1180px; margin: 0 auto 14px; display: flex; gap: 14px; align-items: baseline; flex-wrap: wrap; }
+.review b { font-size: 16px; }
+.review span { color: var(--muted); font-size: 12px; }
+.review a { color: var(--blue); text-decoration: none; font-size: 12px; }
+.window { max-width: 1180px; margin: auto; background: var(--bg); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.titlebar { height: 32px; padding: 0 14px; display: flex; align-items: center; gap: 8px; background: #E9EDF3; border-bottom: 1px solid var(--line); font-size: 12px; color: var(--muted); }
+.mark { width: 20px; height: 20px; display: grid; place-items: center; background: var(--blue); color: white; border-radius: 5px; font: bold 12px var(--mono); }
+.header { padding: 14px 20px; display: flex; gap: 14px; align-items: center; justify-content: space-between; }
+.brand { display: flex; align-items: center; gap: 10px; }
+.brand .mark { width: 32px; height: 32px; font-size: 19px; border-radius: 7px; }
+.brand strong { display: block; font-size: 20px; line-height: 1.2; }
+.brand small { color: var(--muted); font-size: 12px; }
+.badge { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 12px; background: #E7F6EC; color: var(--green); font-size: 12px; white-space: nowrap; }
+.dot { width: 6px; height: 6px; background: currentColor; border-radius: 50%; }
+.filters { display: flex; gap: 10px; align-items: center; margin: 0 20px 16px; padding: 10px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; }
+select, .search { height: 38px; border: 1px solid var(--line); border-radius: 6px; color: var(--ink); background: white; }
+select { padding: 0 10px; min-width: 156px; }
+.product { min-width: 212px; }
+.search { flex: 1; display: flex; align-items: center; gap: 9px; padding: 0 12px; }
+.search svg { width: 16px; height: 16px; color: var(--muted); }
+.search input { width: 100%; border: 0; outline: 0; background: transparent; color: var(--ink); }
+.workspace { display: grid; grid-template-columns: 280px minmax(0, 1fr); gap: 14px; margin: 0 20px; }
+.results, .detail { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; }
+.results { padding: 14px 12px; }
+.section-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; padding: 0 4px 12px; }
+.section-head b { font-size: 14px; }
+.section-head small { font-size: 12px; color: var(--muted); }
+.result { display: block; width: 100%; text-align: left; padding: 12px; margin: 0 0 8px; border: 1px solid transparent; border-radius: 6px; background: white; color: var(--ink); }
+.result b { font-size: 14px; font-weight: 600; }
+.result small { display: block; color: var(--muted); font-size: 12px; margin-top: 4px; }
+.result:hover { background: var(--subtle); }
+.result.active { background: var(--blue-soft); border-color: #B9CCF9; box-shadow: inset 3px 0 var(--blue); }
+.result.active b { color: var(--blue); }
+.catalog-note { border-top: 1px solid var(--line); padding: 12px 4px 0; margin-top: 18px; color: var(--muted); font-size: 12px; }
+.detail { padding: 18px 20px 0; min-width: 0; }
+.detail h1 { margin: 0 0 6px; font-size: 25px; line-height: 1.4; }
+.metadata { display: flex; gap: 7px; flex-wrap: wrap; align-items: center; color: var(--muted); font-size: 12px; }
+.tag { display: inline-block; background: var(--subtle); padding: 2px 7px; border-radius: 4px; color: var(--muted); }
+.description { color: var(--muted); margin: 10px 0; font-size: 13px; }
+.notice { padding: 8px 11px; border-radius: 6px; border: 1px solid #EFDFBB; background: #FFF8E8; color: var(--amber); font-size: 12px; }
+.form { margin-top: 16px; border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; background: white; }
+.form-title { margin-bottom: 10px; font-weight: 600; font-size: 14px; }
+.parameters { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 20px; }
+.field label { display: block; margin-bottom: 6px; font-size: 13px; font-weight: 600; }
+.field .line { display: flex; gap: 10px; align-items: center; }
+.field input { width: 110px; height: 38px; padding: 0 10px; border: 1px solid var(--line); border-radius: 6px; background: #FAFBFD; color: var(--ink); font: bold 16px var(--mono); }
+.field input:focus { outline: 2px solid var(--blue-soft); border-color: var(--blue); background: white; }
+.field input.invalid { border-color: var(--red); background: #FFF3F2; }
+.field .range { color: var(--muted); font: 12px/1.5 var(--mono); }
+.field .error { color: var(--red); font-size: 12px; min-height: 0; margin-top: 4px; }
+.frame { background: var(--frame); color: white; padding: 14px 16px; margin-top: 16px; border-radius: 8px; overflow: hidden; }
+.frame-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; gap: 12px; }
+.frame-head b { font-size: 13px; }
+.frame-head span { color: #ACB8CC; font-size: 11px; }
+.groups { display: flex; gap: 12px; align-items: flex-end; overflow-x: auto; padding: 0 1px 4px; }
+.group { flex: none; text-align: center; }
+.group-name { color: #C1CBDB; font-size: 12px; margin-bottom: 6px; }
+.group-name strong { color: white; margin-left: 5px; font: bold 12px var(--mono); }
+.bracket { height: 7px; border: 1px solid #64728A; border-bottom: 0; border-radius: 3px 3px 0 0; margin-bottom: 4px; }
+.group.parameter .bracket { border-color: #88A5FF; }
+.group.computed .bracket { border-color: #B8A0ED; }
+.cells { display: flex; gap: 4px; }
+.cell { display: grid; place-items: center; width: 38px; height: 38px; border-radius: 4px; background: var(--fixed); color: #C1CBDB; font: bold 15px var(--mono); }
+.parameter .cell { background: var(--blue); color: white; }
+.computed .cell { background: var(--computed); color: #DDD3FF; }
+.group.focus .cell { outline: 2px solid var(--focus); outline-offset: 1px; }
+.offsets { display: flex; gap: 4px; margin-top: 5px; }
+.offsets span { width: 38px; font: 11px var(--mono); color: #ACB8CC; }
+.legend { display: flex; gap: 16px; flex-wrap: wrap; margin: 12px 0; color: #ACB8CC; font-size: 11px; }
+.legend span { display: flex; align-items: center; gap: 5px; }
+.legend i { width: 9px; height: 9px; display: inline-block; border-radius: 2px; }
+.raw { border-top: 1px solid #343D50; padding-top: 10px; display: grid; grid-template-columns: 46px minmax(0, 1fr); gap: 3px 5px; font: 12px/1.6 var(--mono); }
+.raw span { color: #ACB8CC; }
+.raw code { color: #E0E7F2; white-space: pre; overflow-x: auto; }
+.checksum { margin: 9px 0 0; color: var(--muted); font-size: 12px; }
+.actions { margin: 16px -20px 0; padding: 13px 20px; border-top: 1px solid var(--line); background: #FAFBFD; display: flex; gap: 10px; align-items: center; border-radius: 0 0 8px 8px; flex-wrap: wrap; }
+.btn { height: 38px; padding: 0 16px; border-radius: 6px; border: 1px solid var(--line); background: white; color: var(--ink); font-weight: 600; font-size: 13px; }
+.btn.primary { background: var(--blue); color: white; border-color: var(--blue); }
+.btn.primary:hover { background: var(--blue-hover); }
+.btn:disabled { background: var(--subtle); color: var(--disabled); border-color: var(--line); cursor: default; }
+.actions small { font-size: 11px; color: var(--muted); margin-left: auto; }
+.footer { display: flex; justify-content: space-between; gap: 12px; margin: 14px 20px; color: var(--muted); font-size: 12px; }
+.design-note { max-width: 1180px; margin: 14px auto 0; color: var(--muted); font-size: 12px; }
+.design-note summary { cursor: pointer; color: var(--blue); }
+.design-note p { margin: 8px 0; }
+@media (max-width: 1000px) {
+  body { padding: 12px; } .workspace { grid-template-columns: 240px minmax(0, 1fr); }
+  .header, .footer { margin-left: 0; margin-right: 0; } .footer { padding: 0 20px; }
+  .parameters { grid-template-columns: 1fr; } .actions small { width: 100%; margin: 0; }
+}
+@media (max-width: 730px) {
+  .workspace { grid-template-columns: 1fr; } .filters { flex-wrap: wrap; }
+  .search { flex-basis: 100%; } .header { flex-wrap: wrap; }
+}
+</style>
+</head>
+<body>
+<div class="review"><b>美术定稿 V2 · 工程图集 / 字段解剖</b><span>融合预览，可切换协议与参数查看效果</span><a href="mockup.html">候选一</a><a href="index.html">候选二</a></div>
+<div class="window">
+  <div class="titlebar"><span class="mark">A</span>Command Atlas · 控制器指令助手</div>
+  <header class="header">
+    <div class="brand"><span class="mark">⌖</span><div><strong>Command Atlas</strong><small>控制器指令助手 · 查询、填参与组帧</small></div></div>
+    <span class="badge"><i class="dot"></i>本地示例库 · 离线可用</span>
+  </header>
+  <div class="filters">
+    <select class="product" aria-label="产品"><option>灯光控制器（示例产品）</option></select>
+    <select id="protocol" aria-label="协议"><option value="all">全部协议</option><option value="new">新协议 · CA</option><option value="old">旧协议 · ASCII</option><option value="old_ext">旧扩展 · $ / @</option></select>
+    <div class="search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="10" cy="10" r="6"/><path d="m15 15 5 5"/></svg><input aria-label="搜索示意" value="设置亮度" readonly></div>
+  </div>
+  <div class="workspace">
+    <aside class="results">
+      <div class="section-head"><b>指令结果</b><small id="resultCount">3 条示意</small></div>
+      <button class="result active" data-protocol="new"><b>设置通道亮度</b><small>数字 · 新协议 · CA</small></button>
+      <button class="result" data-protocol="old"><b>设置通道亮度（旧协议）</b><small>数字 · 旧协议 · ASCII</small></button>
+      <button class="result" data-protocol="old_ext"><b>设置通道亮度（旧扩展）</b><small>数字 · 旧扩展 · $ / @</small></button>
+      <div class="catalog-note">当前样例范围：通道 1~8。<br>收藏和最近使用在后续阶段加入。</div>
+    </aside>
+    <main class="detail">
+      <h1 id="commandTitle">设置通道亮度</h1>
+      <div class="metadata"><span>灯光控制器（示例产品）</span><span class="tag" id="protocolTag">新协议 · CA</span><span class="tag">数字</span></div>
+      <p class="description">设置指定通道的亮度。数值范围 0~999，实际产品能力以正式指令模板为准。</p>
+      <div class="notice">示例数据用于查询与组帧验收，请核对实际产品的协议能力。</div>
+      <section class="form">
+        <div class="form-title">参数</div>
+        <div class="parameters">
+          <div class="field"><label for="channel">通道</label><div class="line"><input id="channel" type="number" min="1" max="8" step="1" value="1"><span class="range" id="channelEncoding">u8 · 1~8<br>1 字节</span></div><div class="error" id="channelError"></div></div>
+          <div class="field"><label for="brightness">亮度</label><div class="line"><input id="brightness" type="number" min="0" max="999" step="1" value="255"><span class="range" id="valueEncoding">u16 BE · 0~999<br>2 字节</span></div><div class="error" id="valueError"></div></div>
+        </div>
+      </section>
+      <section class="frame">
+        <div class="frame-head"><b>完整指令 · 字段拆解</b><span id="frameSize">6 字节 · 偏移从 0 开始</span></div>
+        <div class="groups" id="groups"></div>
+        <div class="legend"><span><i style="background:var(--fixed)"></i>固定段</span><span><i style="background:var(--blue)"></i>参数段</span><span id="computedLegend"><i style="background:var(--computed)"></i>计算段</span></div>
+        <div class="raw"><span>HEX</span><code id="hexText"></code><span>ASCII</span><code id="asciiText"></code></div>
+      </section>
+      <p class="checksum" id="frameInfo"></p>
+      <div class="actions"><button class="btn primary" id="copyPrimary">复制 HEX</button><button class="btn" id="copySecondary">复制 ASCII</button><button class="btn" id="exportText">导出文本…</button><small id="actionInfo">只生成可复制的帧</small></div>
+    </main>
+  </div>
+  <footer class="footer"><span>本地样例库 · 12 条指令</span><span>Command Atlas · V0.1</span></footer>
+</div>
+<details class="design-note"><summary>定稿范围与原型说明</summary><p>采用第二款的双栏与分组字节图，融合第一款的 Atlas 蓝、纸面灰与控件规范。参数区固定白底；主复制动作随协议格式变化。正式 Qt 应用将在分阶段开发中接入此风格。</p><p>此页面只表达美术与联动效果；搜索、复制与导出按钮为演示，正式协议数据以已验收软件模板为准。图标是占位，正式 SVG/ICO 在后续阶段制作。两款候选中超出已批准计划的功能不随设计自动加入。</p></details>
+<script>
+const byId = id => document.getElementById(id);
+const protocolInput = byId('protocol');
+const channelInput = byId('channel');
+const brightnessInput = byId('brightness');
+const protocolLabels = {new: '新协议 · CA', old: '旧协议 · ASCII', old_ext: '旧扩展 · $ / @'};
+const hexByte = value => value.toString(16).padStart(2, '0').toUpperCase();
+let focusedField = '';
+let activeProtocol = 'new';
+
+function drawFrame() {
+  const protocol = activeProtocol;
+  const channel = Number(channelInput.value);
+  const brightness = Number(brightnessInput.value);
+  const channelValid = channelInput.value !== '' && Number.isInteger(channel) && channel >= 1 && channel <= 8;
+  const valueValid = brightnessInput.value !== '' && Number.isInteger(brightness) && brightness >= 0 && brightness <= 999;
+  channelInput.classList.toggle('invalid', !channelValid);
+  brightnessInput.classList.toggle('invalid', !valueValid);
+  byId('channelError').textContent = channelValid ? '' : '请填写 1~8 的整数';
+  byId('valueError').textContent = valueValid ? '' : '请填写 0~999 的整数';
+  for (const id of ['copyPrimary', 'copySecondary', 'exportText']) byId(id).disabled = !channelValid || !valueValid;
+  if (!channelValid || !valueValid) {
+    byId('groups').replaceChildren();
+    byId('hexText').textContent = '请修正参数后生成';
+    byId('asciiText').textContent = '—';
+    byId('frameInfo').textContent = '参数无效，复制不可用';
+    byId('frameSize').textContent = '等待有效参数';
+    return;
+  }
+
+  let groups;
+  if (protocol === 'new') {
+    const prefix = [0xCA, 0x01, channel, brightness >> 8, brightness & 255];
+    const bcc = prefix.reduce((checksum, byte) => checksum ^ byte, 0);
+    groups = [
+      {kind:'fixed', label:'固定段', bytes:[0xCA,0x01]},
+      {kind:'parameter', field:'channel', label:'通道', value:channel, bytes:[channel]},
+      {kind:'parameter', field:'brightness', label:'亮度', value:brightness, bytes:[brightness >> 8,brightness & 255]},
+      {kind:'computed', label:'XOR BCC', bytes:[bcc]}
+    ];
+    byId('frameInfo').textContent = `XOR BCC = 0x${hexByte(bcc)}（对前 5 字节逐字节异或）`;
+  } else {
+    const chars = text => Array.from(text, c => c.charCodeAt(0));
+    groups = [
+      {kind:'fixed',label:'固定段',bytes:chars(protocol === 'old' ? 'S' : '$01')},
+      {kind:'parameter',field:'channel',label:'通道',value:channel,bytes:chars(String.fromCharCode(64+channel))}
+    ];
+    if (protocol === 'old') groups.push({kind:'fixed',label:'固定段',bytes:chars('0')});
+    groups.push({kind:'parameter',field:'brightness',label:'亮度',value:brightness,bytes:chars(String(brightness).padStart(protocol === 'old' ? 3 : 4,'0'))});
+    groups.push({kind:'fixed',label:'固定段',bytes:chars('#')});
+    byId('frameInfo').textContent = `${protocol === 'old' ? '三' : '四'}位 ASCII 数字补零 · A~H 对应通道 1~8 · 无 BCC`;
+  }
+  const bytes = groups.flatMap(group => group.bytes);
+  let offset = 0;
+  byId('groups').replaceChildren();
+  for (const group of groups) {
+    const block = document.createElement('div');
+    block.className = `group ${group.kind}${focusedField && group.field === focusedField ? ' focus' : ''}`;
+    const name = document.createElement('div');
+    name.className = 'group-name';
+    name.textContent = group.label;
+    if (group.value !== undefined) { const current = document.createElement('strong'); current.textContent = String(group.value); name.append(current); }
+    const bracket = document.createElement('div'); bracket.className = 'bracket';
+    const cells = document.createElement('div'); cells.className = 'cells';
+    const offsets = document.createElement('div'); offsets.className = 'offsets';
+    for (const byte of group.bytes) {
+      const cell = document.createElement('div'); cell.className = 'cell'; cell.textContent = protocol === 'new' ? hexByte(byte) : String.fromCharCode(byte); cells.append(cell);
+      const coordinate = document.createElement('span'); coordinate.textContent = String(offset++); offsets.append(coordinate);
+    }
+    block.append(name, bracket, cells, offsets); byId('groups').append(block);
+  }
+  byId('frameSize').textContent = `${bytes.length} 字节 · 偏移从 0 开始`;
+  byId('hexText').textContent = bytes.map(hexByte).join(' ');
+  byId('asciiText').textContent = bytes.map(byte => byte >= 32 && byte <= 126 ? String.fromCharCode(byte) : `\\x${hexByte(byte)}`).join('');
+  byId('computedLegend').hidden = protocol !== 'new';
+}
+
+function chooseProtocol(protocol) {
+  activeProtocol = protocol;
+  brightnessInput.value = protocol === 'old_ext' ? 123 : 255;
+  channelInput.value = 1;
+  byId('commandTitle').textContent = `设置通道亮度${protocol === 'new' ? '' : protocol === 'old' ? '（旧协议）' : '（旧扩展协议）'}`;
+  byId('protocolTag').textContent = protocolLabels[protocol];
+  byId('channelEncoding').innerHTML = protocol === 'new' ? 'u8 · 1~8<br>1 字节' : 'A~H · 1~8<br>1 字符';
+  byId('valueEncoding').innerHTML = protocol === 'new' ? 'u16 BE · 0~999<br>2 字节' : `ASCII · 0~999<br>${protocol === 'old' ? 3 : 4} 字符补零`;
+  byId('copyPrimary').textContent = protocol === 'new' ? '复制 HEX' : '复制 ASCII';
+  byId('copySecondary').textContent = protocol === 'new' ? '复制 ASCII' : '复制 HEX';
+  document.querySelectorAll('.result').forEach(result => result.classList.toggle('active', result.dataset.protocol === protocol));
+  drawFrame();
+}
+protocolInput.addEventListener('change', () => {
+  const filter = protocolInput.value;
+  document.querySelectorAll('.result').forEach(result => { result.hidden = filter !== 'all' && result.dataset.protocol !== filter; });
+  byId('resultCount').textContent = filter === 'all' ? '3 条示意' : '1 条示意';
+  if (filter !== 'all') chooseProtocol(filter);
+});
+document.querySelectorAll('.result').forEach(result => result.addEventListener('click', () => chooseProtocol(result.dataset.protocol)));
+for (const [input, field] of [[channelInput,'channel'],[brightnessInput,'brightness']]) {
+  input.addEventListener('input', drawFrame);
+  input.addEventListener('focus', () => { focusedField = field; drawFrame(); });
+  input.addEventListener('blur', () => { focusedField = ''; drawFrame(); });
+}
+for (const id of ['copyPrimary','copySecondary','exportText']) byId(id).addEventListener('click', () => {
+  byId('actionInfo').textContent = '操作反馈示意：已完成';
+  setTimeout(() => { byId('actionInfo').textContent = '只生成可复制的帧'; }, 1400);
+});
+chooseProtocol('new');
+</script>
+</body>
+</html>

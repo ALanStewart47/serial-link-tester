@@ -13,19 +13,18 @@
 #include <QLineEdit>
 #include <QPushButton>
 #include <QSettings>
+#include <QShowEvent>
+#include <QSignalBlocker>
 #include <QStandardPaths>
 #include <QUrl>
 #include <QVBoxLayout>
 
 QString SettingsPage::defaultLogDir()
 {
-    return QStandardPaths::writableLocation(QStandardPaths::AppDataLocation)
-           + QStringLiteral("/logs");
+    return QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + QStringLiteral("/logs");
 }
 
-SettingsPage::SettingsPage(LogManager *log, QWidget *parent)
-    : QWidget(parent)
-    , m_log(log)
+SettingsPage::SettingsPage(LogManager *log, QWidget *parent) : QWidget(parent), m_log(log)
 {
     buildUi();
 
@@ -42,6 +41,18 @@ SettingsPage::SettingsPage(LogManager *log, QWidget *parent)
     connect(m_fullLogCheck, &QCheckBox::toggled, this, &SettingsPage::onFullLogToggled);
 }
 
+void SettingsPage::showEvent(QShowEvent *event)
+{
+    QWidget::showEvent(event);
+    QSettings s(AppConfig::Org(), AppConfig::App());
+    const QString dir = s.value(AppConfig::Key::LogDir, defaultLogDir()).toString();
+    const bool full = s.value(AppConfig::Key::FullLog, false).toBool();
+    const QSignalBlocker blocker(m_fullLogCheck);
+    m_dirEdit->setText(dir);
+    m_fullLogCheck->setChecked(full);
+    m_log->setLogDir(dir);
+}
+
 void SettingsPage::buildUi()
 {
     auto *root = new QVBoxLayout(this);
@@ -50,6 +61,8 @@ void SettingsPage::buildUi()
 
     auto *logGroup = new QGroupBox(QStringLiteral("日志设置"), this);
     auto *form = new QFormLayout(logGroup);
+    logGroup->setMaximumWidth(960);
+    form->setVerticalSpacing(16);
 
     auto *dirRow = new QHBoxLayout;
     m_dirEdit = new QLineEdit(logGroup);
@@ -63,9 +76,9 @@ void SettingsPage::buildUi()
     m_fullLogCheck = new QCheckBox(QStringLiteral("保存全量日志（每轮收发都写文件，默认关闭）"), logGroup);
     form->addRow(QString(), m_fullLogCheck);
 
-    m_hint = new QLabel(QStringLiteral(
-        "说明：统计汇总(summary.csv)与异常明细(exception_*.csv)默认始终保存；\n"
-        "全量日志(full_*.csv)体积大，仅在勾选后保存，采用后台线程异步写入，不影响发送与界面。"), logGroup);
+    m_hint = new QLabel(QStringLiteral("统计汇总与异常明细会自动保存。\n"
+                                       "全量日志包含每轮收发内容，长时间测试会产生较大文件，按需开启即可。"),
+                        logGroup);
     m_hint->setWordWrap(true);
     m_hint->setStyleSheet(QStringLiteral("color: gray;"));
     form->addRow(QString(), m_hint);
@@ -79,8 +92,8 @@ void SettingsPage::buildUi()
 
 void SettingsPage::browseDir()
 {
-    const QString dir = QFileDialog::getExistingDirectory(this,
-        QStringLiteral("选择日志目录"), m_dirEdit->text());
+    const QString dir =
+        QFileDialog::getExistingDirectory(this, QStringLiteral("选择日志目录"), m_dirEdit->text());
     if (!dir.isEmpty()) {
         m_dirEdit->setText(dir);
         onDirChanged();

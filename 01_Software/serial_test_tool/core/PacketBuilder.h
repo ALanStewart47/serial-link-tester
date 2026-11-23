@@ -18,6 +18,9 @@ QByteArray fromAsciiText(const QString &text);
 // 用于“发送内容”需要带回车换行/控制字符的场景。非法 \x 时 ok=false。
 QByteArray fromAsciiEscaped(const QString &text, bool *ok = nullptr);
 
+// 按指令或测试计划的格式解析字节，旧 ascii 按字面解析。
+QByteArray decodeCommandText(const QString &format, const QString &text, bool *ok = nullptr);
+
 // 逐字节异或校验。
 quint8 bccXor(const QByteArray &data);
 

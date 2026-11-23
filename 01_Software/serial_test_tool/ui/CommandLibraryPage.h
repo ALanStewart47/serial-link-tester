@@ -2,8 +2,9 @@
 
 #include <QWidget>
 
+struct CommandItem;
 class CommandLibrary;
-class SerialTransport;
+class IByteTransport;
 
 class QLineEdit;
 class QPushButton;
@@ -18,7 +19,9 @@ class CommandLibraryPage : public QWidget
     Q_OBJECT
 
 public:
-    CommandLibraryPage(CommandLibrary *library, SerialTransport *transport, QWidget *parent = nullptr);
+    CommandLibraryPage(CommandLibrary *library, IByteTransport *transport, QWidget *parent = nullptr);
+signals:
+    void multichannelRequested();
 
 private slots:
     void reload();
@@ -32,18 +35,20 @@ private slots:
     void importLibrary();
     void exportLibrary();
     void sendOnce();
+    void fillExpectedFromLastRx();
 
 private:
     void buildUi();
     QString selectedCommandId() const;
-    bool matchesFilter(const QString &commandId) const;
 
     CommandLibrary *m_library = nullptr;
-    SerialTransport *m_transport = nullptr;
+    IByteTransport *m_transport = nullptr;
+    QString m_pendingCommandId;
 
     QLineEdit *m_searchEdit = nullptr;
     QTreeWidget *m_tree = nullptr;
     QPushButton *m_sendButton = nullptr;
+    QPushButton *m_fillExpectedButton = nullptr;
     QPushButton *m_addButton = nullptr;
     QPushButton *m_copyButton = nullptr;
     QPushButton *m_editButton = nullptr;

@@ -1,23 +1,32 @@
 #include "ui/CommandEditDialog.h"
 
+#include "core/CommandHistory.h"
+#include "core/PacketBuilder.h"
+
 #include <QCheckBox>
 #include <QComboBox>
 #include <QDialogButtonBox>
 #include <QFormLayout>
+#include <QHBoxLayout>
+#include <QLabel>
 #include <QLineEdit>
 #include <QMessageBox>
-#include <QSpinBox>
+#include <QPushButton>
+#include <QtGlobal>
 #include <QVBoxLayout>
 
-CommandEditDialog::CommandEditDialog(QWidget *parent)
-    : QDialog(parent)
+CommandEditDialog::CommandEditDialog(QWidget *parent) : QDialog(parent)
 {
     setWindowTitle(QStringLiteral("编辑指令"));
-    setMinimumWidth(520);
+    setMinimumWidth(640);
+    resize(720, 620);
 
     auto *root = new QVBoxLayout(this);
+    root->setContentsMargins(20, 16, 20, 16);
     auto *form = new QFormLayout;
     form->setLabelAlignment(Qt::AlignRight);
+    form->setVerticalSpacing(10);
+    form->setHorizontalSpacing(14);
 
     m_id = new QLineEdit(this);
     m_protocol = new QComboBox(this);
@@ -33,21 +42,25 @@ CommandEditDialog::CommandEditDialog(QWidget *parent)
 
     m_sendFormat = new QComboBox(this);
     m_sendFormat->addItem(QStringLiteral("HEX"), QStringLiteral("hex"));
-    m_sendFormat->addItem(QStringLiteral("ASCII"), QStringLiteral("ascii"));
+    m_sendFormat->addItem(QStringLiteral("ASCII（转义）"), QStringLiteral("ascii_escaped"));
+    m_sendFormat->addItem(QStringLiteral("ASCII（旧设置）"), QStringLiteral("ascii"));
     m_sendData = new QLineEdit(this);
+    m_sendData->setProperty("role", "code");
+    m_sendData->setMinimumHeight(28);
     m_bcc = new QCheckBox(QStringLiteral("自动追加 BCC（仅 HEX 有效）"), this);
 
     m_replyFormat = new QComboBox(this);
     m_replyFormat->addItem(QStringLiteral("HEX"), QStringLiteral("hex"));
-    m_replyFormat->addItem(QStringLiteral("ASCII"), QStringLiteral("ascii"));
+    m_replyFormat->addItem(QStringLiteral("ASCII（转义）"), QStringLiteral("ascii_escaped"));
+    m_replyFormat->addItem(QStringLiteral("ASCII（旧设置）"), QStringLiteral("ascii"));
     m_reply = new QLineEdit(this);
-
-    m_timeoutMode = new QComboBox(this);
-    m_timeoutMode->addItem(QStringLiteral("自动（间隔×2）"), QStringLiteral("auto"));
-    m_timeoutMode->addItem(QStringLiteral("手动"), QStringLiteral("manual"));
-    m_timeoutMs = new QSpinBox(this);
-    m_timeoutMs->setRange(10, 5000);
-    m_timeoutMs->setSuffix(QStringLiteral(" ms"));
+    m_reply->setProperty("role", "code");
+    m_reply->setMinimumHeight(28);
+    m_reply->setMaxLength(CommandItem::MaxFrameTextLength);
+    m_fillReplyButton = new QPushButton(QStringLiteral("填入最近接收"), this);
+    auto *replyRow = new QHBoxLayout;
+    replyRow->addWidget(m_reply, 1);
+    replyRow->addWidget(m_fillReplyButton);
 
     m_description = new QLineEdit(this);
     m_enabled = new QCheckBox(QStringLiteral("启用"), this);
@@ -62,29 +75,35 @@ CommandEditDialog::CommandEditDialog(QWidget *parent)
     form->addRow(QStringLiteral("发送内容"), m_sendData);
     form->addRow(QString(), m_bcc);
     form->addRow(QStringLiteral("回复格式"), m_replyFormat);
-    form->addRow(QStringLiteral("正确回复"), m_reply);
-    form->addRow(QStringLiteral("超时模式"), m_timeoutMode);
-    form->addRow(QStringLiteral("手动超时"), m_timeoutMs);
+    form->addRow(QStringLiteral("正确回复"), replyRow);
     form->addRow(QStringLiteral("说明"), m_description);
     form->addRow(QString(), m_enabled);
     form->addRow(QStringLiteral("备注"), m_remark);
+    auto *timeoutHint = new QLabel(QStringLiteral("超时时间在「自动测试 → 测试设置」中调整。"), this);
+    timeoutHint->setStyleSheet(QStringLiteral("color:#666;"));
+    form->addRow(QString(), timeoutHint);
     root->addLayout(form);
 
     auto *buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
+    buttons->button(QDialogButtonBox::Ok)->setText(QStringLiteral("保存指令"));
+    buttons->button(QDialogButtonBox::Ok)->setProperty("role", "primary");
+    buttons->button(QDialogButtonBox::Cancel)->setText(QStringLiteral("取消"));
     root->addWidget(buttons);
     connect(buttons, &QDialogButtonBox::accepted, this, &CommandEditDialog::validateAndAccept);
     connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
+    connect(m_fillReplyButton, &QPushButton::clicked, this, &CommandEditDialog::fillReplyFromLastRx);
+}
 
-    // 手动超时仅在手动模式可编辑。
-    connect(m_timeoutMode, &QComboBox::currentIndexChanged, this, [this] {
-        m_timeoutMs->setEnabled(m_timeoutMode->currentData().toString() == QStringLiteral("manual"));
-    });
-    m_timeoutMs->setEnabled(false);
+void CommandEditDialog::setLastRx(const QByteArray &rx)
+{
+    m_lastRx = rx;
 }
 
 void CommandEditDialog::setItem(const CommandItem &item)
 {
     m_builtin = item.builtin;
+    m_timeoutMode = item.timeoutMode.isEmpty() ? QStringLiteral("auto") : item.timeoutMode;
+    m_timeoutMs = qBound(10, item.timeoutMs, 5000);
     m_id->setText(item.commandId);
     m_protocol->setCurrentIndex(qMax(0, m_protocol->findData(item.protocolType)));
     m_group->setCurrentIndex(qMax(0, m_group->findData(item.functionGroup)));
@@ -94,9 +113,6 @@ void CommandEditDialog::setItem(const CommandItem &item)
     m_bcc->setChecked(item.enableBcc);
     m_replyFormat->setCurrentIndex(qMax(0, m_replyFormat->findData(item.expectedReplyFormat)));
     m_reply->setText(item.expectedReply);
-    m_timeoutMode->setCurrentIndex(qMax(0, m_timeoutMode->findData(item.timeoutMode)));
-    m_timeoutMs->setValue(qBound(10, item.timeoutMs, 5000));
-    m_timeoutMs->setEnabled(item.timeoutMode == QStringLiteral("manual"));
     m_description->setText(item.description);
     m_enabled->setChecked(item.enabled);
     m_remark->setText(item.remark);
@@ -115,11 +131,11 @@ CommandItem CommandEditDialog::item() const
     item.expectedReplyFormat = m_replyFormat->currentData().toString();
     item.expectedReply = m_reply->text();
     item.matchRule = QStringLiteral("exact");
-    item.timeoutMode = m_timeoutMode->currentData().toString();
-    item.timeoutMs = m_timeoutMs->value();
+    item.timeoutMode = m_timeoutMode;
+    item.timeoutMs = m_timeoutMs;
     item.description = m_description->text();
     item.enabled = m_enabled->isChecked();
-    item.builtin = m_builtin; // 用户新增/复制的指令 builtin 应为 false，由调用方设置
+    item.builtin = m_builtin;
     item.remark = m_remark->text();
     return item;
 }
@@ -127,6 +143,23 @@ CommandItem CommandEditDialog::item() const
 void CommandEditDialog::setIdEditable(bool editable)
 {
     m_id->setReadOnly(!editable);
+}
+
+void CommandEditDialog::fillReplyFromLastRx()
+{
+    if (m_lastRx.isEmpty()) {
+        QMessageBox::warning(this, QStringLiteral("无法填入"),
+                             QStringLiteral("还没有收到过数据。请先单发或手动发送，待设备回复后再填入。"));
+        return;
+    }
+    QString format = m_replyFormat->currentData().toString();
+    const QString reply = CommandHistory::formatReplyText(m_lastRx, format);
+    if (reply.size() > m_reply->maxLength()) {
+        QMessageBox::warning(this, QStringLiteral("无法填入"), QStringLiteral("接收内容超过回复长度上限。"));
+        return;
+    }
+    m_replyFormat->setCurrentIndex(m_replyFormat->findData(format));
+    m_reply->setText(reply);
 }
 
 void CommandEditDialog::validateAndAccept()
@@ -137,6 +170,19 @@ void CommandEditDialog::validateAndAccept()
     }
     if (m_name->text().trimmed().isEmpty()) {
         QMessageBox::warning(this, QStringLiteral("校验失败"), QStringLiteral("指令名称不能为空。"));
+        return;
+    }
+    const CommandItem draft = item();
+    bool ok = true;
+    if (draft.sendFormat == QStringLiteral("ascii_escaped")) {
+        PacketBuilder::decodeCommandText(draft.sendFormat, draft.sendData, &ok);
+    }
+    if (ok && draft.expectedReplyFormat == QStringLiteral("ascii_escaped")) {
+        PacketBuilder::decodeCommandText(draft.expectedReplyFormat, draft.expectedReply, &ok);
+    }
+    if (!ok) {
+        QMessageBox::warning(this, QStringLiteral("转义格式错误"),
+                             QStringLiteral("发送内容或正确回复中的 \\x 后需跟两位十六进制，例如 \\x0D。"));
         return;
     }
     accept();
