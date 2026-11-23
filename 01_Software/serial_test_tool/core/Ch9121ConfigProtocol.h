@@ -29,7 +29,8 @@ enum class Command : quint8 {
     GetNak = 0xC2,
 };
 
-struct Packet {
+struct Packet
+{
     Command command = Command::Search;
     QByteArray deviceMac;
     QByteArray pcMac;
@@ -37,7 +38,8 @@ struct Packet {
     QByteArray data;
 };
 
-struct DeviceSummary {
+struct DeviceSummary
+{
     QString id;
     QHostAddress ip;
     QByteArray mac;
@@ -46,14 +48,16 @@ struct DeviceSummary {
 
 enum class UdpParity : quint8 { Odd = 0, Even = 1, Mark = 2, Space = 3, None = 4 };
 
-struct UartConfig {
+struct UartConfig
+{
     quint32 baudRate = 0;
     quint8 dataBits = 0;
     quint8 stopBits = 0;
     UdpParity parity = UdpParity::None;
 };
 
-struct DeviceConfig {
+struct DeviceConfig
+{
     QString id;
     QHostAddress ip;
     QHostAddress gateway;
@@ -67,7 +71,8 @@ struct DeviceConfig {
 };
 
 // Only explicitly changed fields are patched; unknown bytes survive read/modify/write.
-struct ConfigEdits {
+struct ConfigEdits
+{
     std::optional<QString> name;
     std::optional<QHostAddress> ip, gateway, netmask;
     std::optional<bool> dhcpEnabled;
@@ -79,10 +84,10 @@ struct ConfigEdits {
 
 QByteArray makeSearchPacket(const QByteArray &pcMac);
 QByteArray makeGetPacket(const QByteArray &deviceMac, const QByteArray &pcMac);
-QByteArray makeSetPacket(const DeviceConfig &base, const QByteArray &pcMac,
-                         const ConfigEdits &edits, QString *error = nullptr);
+QByteArray makeSetPacket(const DeviceConfig &base, const QByteArray &pcMac, const ConfigEdits &edits,
+                         QString *error = nullptr);
 std::optional<DeviceConfig> applyEdits(const DeviceConfig &base, const ConfigEdits &edits,
-                                      QString *error = nullptr);
+                                       QString *error = nullptr);
 QStringList conflictingFields(const DeviceConfig &original, const DeviceConfig &fresh,
                               const ConfigEdits &edits);
 QStringList differingFields(const DeviceConfig &expected, const DeviceConfig &actual);

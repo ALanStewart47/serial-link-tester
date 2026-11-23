@@ -4,5 +4,6 @@
         <file>app.qss</file>
         <file>chevron-down.svg</file>
         <file>chevron-up.svg</file>
+        <file>app-icon.ico</file>
     </qresource>
 </RCC>

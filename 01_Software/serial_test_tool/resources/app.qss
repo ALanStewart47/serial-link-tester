@@ -1,6 +1,8 @@
 QWidget { color: #243247; }
 QLabel { background: transparent; }
 QLabel[role="muted"] { color: #637187; }
+QFrame[role="responseCard"] { background: #f4f7fd; border: 1px solid #e2e9f5; border-radius: 6px; }
+QLabel[role="responseValue"] { font-size: 23px; font-weight: 600; color: #174da6; }
 QLabel[role="metric"] { font-size: 17px; font-weight: 600; color: #174da6; }
 QLabel[role="code"], QLineEdit[role="code"], QPlainTextEdit { font-family: Consolas, "Microsoft YaHei UI"; font-size: 13px; }
 QWidget#connectionBar { background: white; border: 1px solid #dce3ed; border-radius: 8px; }

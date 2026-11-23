@@ -13,18 +13,18 @@ void TestStatistics::recordSend()
     ++m_send;
 }
 
-void TestStatistics::recordMatch(qint64 respMs)
+void TestStatistics::recordMatchUs(qint64 respUs)
 {
     ++m_match;
-    if (respMs < 0) {
-        respMs = 0;
+    if (respUs < 0) {
+        respUs = 0;
     }
-    m_totalResp += respMs;
-    if (m_match == 1 || respMs < m_minResp) {
-        m_minResp = respMs;
+    m_totalResp += respUs;
+    if (m_match == 1 || respUs < m_minResp) {
+        m_minResp = respUs;
     }
-    if (respMs > m_maxResp) {
-        m_maxResp = respMs;
+    if (respUs > m_maxResp) {
+        m_maxResp = respUs;
     }
 }
 
@@ -40,10 +40,11 @@ void TestStatistics::recordTimeout()
 
 double TestStatistics::lossRate() const
 {
-    if (m_send == 0) {
+    const quint64 completed = completedCount();
+    if (completed == 0) {
         return 0.0;
     }
-    return static_cast<double>(m_timeout) / static_cast<double>(m_send);
+    return static_cast<double>(m_timeout) / static_cast<double>(completed);
 }
 
 double TestStatistics::correctRate() const
@@ -57,13 +58,14 @@ double TestStatistics::correctRate() const
 
 double TestStatistics::successRate() const
 {
-    if (m_send == 0) {
+    const quint64 completed = completedCount();
+    if (completed == 0) {
         return 0.0;
     }
-    return static_cast<double>(m_match) / static_cast<double>(m_send);
+    return static_cast<double>(m_match) / static_cast<double>(completed);
 }
 
-double TestStatistics::avgRespMs() const
+double TestStatistics::avgRespUs() const
 {
     if (m_match == 0) {
         return 0.0;
@@ -73,7 +75,8 @@ double TestStatistics::avgRespMs() const
 
 QString TestStatistics::lossRateText() const
 {
-    return QStringLiteral("%1%").arg(lossRate() * 100.0, 0, 'f', 2);
+    return completedCount() == 0 ? QStringLiteral("N/A")
+                                 : QStringLiteral("%1%").arg(lossRate() * 100.0, 0, 'f', 2);
 }
 
 QString TestStatistics::correctRateText() const
@@ -84,26 +87,36 @@ QString TestStatistics::correctRateText() const
 
 QString TestStatistics::successRateText() const
 {
-    return QStringLiteral("%1%").arg(successRate() * 100.0, 0, 'f', 2);
+    return completedCount() == 0 ? QStringLiteral("N/A")
+                                 : QStringLiteral("%1%").arg(successRate() * 100.0, 0, 'f', 2);
+}
+
+QString TestStatistics::formatResponseUs(double respUs)
+{
+    // 先按展示精度舍入，避免边界出现“1000 μs”而未切回毫秒。
+    const double roundedUs = qRound64(qMax(0.0, respUs) * 10.0) / 10.0;
+    if (roundedUs < 1000.0) {
+        return QStringLiteral("%1 μs").arg(roundedUs, 0, 'f', roundedUs == qint64(roundedUs) ? 0 : 1);
+    }
+    return QStringLiteral("%1 ms").arg(roundedUs / 1000.0, 0, 'f', 3);
 }
 
 QString TestStatistics::minRespText() const
 {
-    return m_match == 0 ? QStringLiteral("—") : QStringLiteral("%1 ms").arg(minRespMs());
+    return m_match == 0 ? QStringLiteral("—") : formatResponseUs(minRespUs());
 }
 
 QString TestStatistics::avgRespText() const
 {
-    return m_match == 0 ? QStringLiteral("—") : QStringLiteral("%1 ms").arg(avgRespMs(), 0, 'f', 1);
+    return m_match == 0 ? QStringLiteral("—") : formatResponseUs(avgRespUs());
 }
 
 QString TestStatistics::maxRespText() const
 {
-    return m_match == 0 ? QStringLiteral("—") : QStringLiteral("%1 ms").arg(maxRespMs());
+    return m_match == 0 ? QStringLiteral("—") : formatResponseUs(maxRespUs());
 }
 
 QString TestStatistics::respText() const
 {
-    return QStringLiteral("最小 %1　平均 %2　最大 %3")
-        .arg(minRespText(), avgRespText(), maxRespText());
+    return QStringLiteral("最小 %1　平均 %2　最大 %3").arg(minRespText(), avgRespText(), maxRespText());
 }

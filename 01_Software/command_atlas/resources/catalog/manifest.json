@@ -1,0 +1,9 @@
+{
+  "format": "command-atlas-catalog",
+  "schema_version": 1,
+  "catalog_id": "command-atlas-stage1-examples",
+  "catalog_version": "0.1.0",
+  "products_file": "products.json",
+  "commands_file": "commands.json",
+  "synonyms_file": "synonyms.json"
+}

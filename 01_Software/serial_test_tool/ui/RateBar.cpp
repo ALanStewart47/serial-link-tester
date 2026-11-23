@@ -4,9 +4,7 @@
 #include <QPainter>
 
 RateBar::RateBar(const QString &caption, const QColor &fillColor, QWidget *parent)
-    : QWidget(parent)
-    , m_caption(caption)
-    , m_fill(fillColor)
+    : QWidget(parent), m_caption(caption), m_fill(fillColor)
 {
     setMinimumHeight(62);
 }
@@ -28,8 +26,7 @@ void RateBar::paintEvent(QPaintEvent *)
     QPainter p(this);
     p.setRenderHint(QPainter::Antialiasing, true);
 
-    const QString text = m_na ? QStringLiteral("N/A")
-                              : QStringLiteral("%1%").arg(m_pct, 0, 'f', 2);
+    const QString text = m_na ? QStringLiteral("N/A") : QStringLiteral("%1%").arg(m_pct, 0, 'f', 2);
     p.setPen(palette().color(QPalette::WindowText));
     p.drawText(QRect(0, 0, width(), 22), Qt::AlignLeft | Qt::AlignVCenter, m_caption);
     QFont valueFont = font();

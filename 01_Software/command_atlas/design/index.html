@@ -1,0 +1,437 @@
+<!-- AI生成 -->
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Command Atlas · 协议解剖图鉴 重设计</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<p data-aigc-mark="1" style="margin:0 0 8px;font-size:10px;line-height:1.3;color:#6b6560;font-weight:400;">AI生成</p>
+
+<div class="shell">
+
+  <header class="doc-head">
+    <div>
+      <div class="eyebrow"><span class="tick"></span>Command Atlas · UI Redesign Proposal</div>
+      <h1>协议解剖图鉴 <span>/ Protocol Field Guide</span></h1>
+      <p class="sub">
+        针对售后「60 秒内搜到 · 看懂 · 敢复制」主路径重做视觉层级。
+        字节地图升级为带引线标注的<strong>解剖图</strong>——参数表单与帧字节双向联动，
+        复制动作成为唯一视觉终点。保留 Atlas 蓝基因与 L0~L3 / 同步四态语义，收敛低价值右栏。
+      </p>
+    </div>
+    <aside class="verdict">
+      <div class="k">对 V1 mockup 的结论</div>
+      <div class="v">底盘合格，<em>主次不够</em></div>
+      <ul>
+        <li>三列等权淹没主路径</li>
+        <li>字节色块缺字段分组</li>
+        <li>字号对比偏弱</li>
+        <li>规范与 theme.qss 已漂移</li>
+      </ul>
+    </aside>
+  </header>
+
+  <nav class="switch" id="stageSwitch">
+    <button class="active" data-stage="0">① 售后查询 / 组帧</button>
+    <button data-stage="1">② 研发录入</button>
+    <button data-stage="2">③ 同步与快照</button>
+    <button data-stage="3">④ 设计说明</button>
+  </nav>
+
+  <!-- ========================= STAGE 0 ========================= -->
+  <section class="stage active" id="stage-0">
+    <div class="win">
+      <div class="win-bar">
+        <span class="app-icon">A</span>
+        <span class="title">CommandAtlas.exe — 控制器指令助手</span>
+        <span class="spacer"></span>
+        <div class="win-actions"><i></i><i></i><i></i></div>
+      </div>
+
+      <div class="ctx">
+        <div class="brand">
+          <div class="brand-mark">⌖</div>
+          <div class="brand-text">
+            <b>Command Atlas</b>
+            <span>指令解剖 · 本地组帧</span>
+          </div>
+        </div>
+        <div class="pill"><span class="cap">产品</span>光源控制器 X 系列<span class="caret">▾</span></div>
+        <div class="pill"><span class="cap">型号</span>X-4008<span class="caret">▾</span></div>
+        <div class="pill"><span class="cap">固件</span>v2.3<span class="caret">▾</span></div>
+        <div class="pill"><span class="cap">协议</span>新协议<span class="caret">▾</span></div>
+        <div class="grow"></div>
+        <div class="sync" title="数据版本 2026.09.28.1">
+          <span class="dot"></span>已同步
+          <span class="meta">2026.09.28.1</span>
+        </div>
+      </div>
+
+      <div class="search-wrap">
+        <div class="search">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+            <circle cx="11" cy="11" r="7"/><path d="M20 20l-3.6-3.6" stroke-linecap="round"/>
+          </svg>
+          <span class="ph">用中文搜：调光 · 设亮度 · 通道3设255 · 查设备IP…</span>
+          <kbd>Ctrl K</kbd>
+        </div>
+      </div>
+      <div class="hints">
+        <button class="hint-chip" data-preset="1,255">设置亮度 <span class="why">别名命中</span></button>
+        <button class="hint-chip" data-preset="3,128">通道3调到128 <span class="why">意图+参数</span></button>
+        <button class="hint-chip" data-preset="1,0">关掉1路 <span class="why">同义词</span></button>
+        <button class="hint-chip" data-preset="40,999">最亮全开 <span class="why">边界值</span></button>
+      </div>
+
+      <div class="workspace">
+        <!-- results -->
+        <aside class="results">
+          <div class="results-head">
+            <h2>搜索结果</h2>
+            <span class="count">3 条 · 已过滤不适用</span>
+          </div>
+
+          <div class="res-item selected" data-cmd="bright">
+            <div class="row1">
+              <span class="name">设置通道亮度</span>
+              <span class="badge L1"><i></i>L1</span>
+            </div>
+            <div class="proto">新协议 · CA 01 · 6 字节</div>
+            <div class="why">匹配：别名 <b>「调光」</b> + 意图 <b>「设置亮度」</b> · 适用 X-4008 / v2.3</div>
+          </div>
+
+          <div class="res-item" data-cmd="readbright">
+            <div class="row1">
+              <span class="name">读取通道亮度</span>
+              <span class="badge L0"><i></i>L0</span>
+            </div>
+            <div class="proto">新协议 · CA 02 · 3 字节</div>
+            <div class="why">匹配：意图 <b>「读亮度」</b></div>
+          </div>
+
+          <div class="res-item" data-cmd="ip">
+            <div class="row1">
+              <span class="name">读取设备 IP</span>
+              <span class="badge L0"><i></i>L0</span>
+            </div>
+            <div class="proto">新协议 · CA 0F · 4 字节</div>
+            <div class="why">匹配：意图 <b>「查设备IP」</b></div>
+          </div>
+
+          <div style="margin-top:14px" class="form-card">
+            <div class="sec">最近 · 收藏</div>
+            <div style="font-size:12px;color:var(--muted);line-height:1.9">
+              ◷ 设置通道亮度 · 通道3=128<br>
+              ☆ 读取设备 IP
+            </div>
+          </div>
+        </aside>
+
+        <!-- anatomy detail -->
+        <main class="detail">
+          <div class="detail-head">
+            <h2 id="cmdTitle">设置通道亮度</h2>
+            <div class="tags">
+              <span class="badge L1"><i></i>L1 可恢复设置</span>
+              <span class="badge L0" style="background:#E9EEF5;color:var(--ink-2)"><i></i>断电不保存</span>
+            </div>
+          </div>
+          <p class="detail-desc" id="cmdDesc">
+            设置指定通道的亮度值。范围 <strong>0~999</strong>（16 位大端），修改立即生效、断电不保存。
+            建议设置后读回确认。<strong>不会向设备发送</strong>——只生成可复制的帧。
+          </p>
+
+          <div class="form-card">
+            <div class="sec">参数 · 确认后生成帧</div>
+            <div class="params" id="paramForm">
+              <div class="param" id="pChannel">
+                <label>通道</label>
+                <div class="ctl">
+                  <input type="text" id="inChannel" value="1" inputmode="numeric">
+                  <div class="rng">u8 · 1 ~ 40<br>1 字节</div>
+                </div>
+                <div class="err-msg">通道必须在 1 ~ 40</div>
+              </div>
+              <div class="param" id="pBright">
+                <label>亮度</label>
+                <div class="ctl">
+                  <input type="text" id="inBright" value="255" inputmode="numeric">
+                  <div class="rng">u16 BE · 0 ~ 999<br>2 字节</div>
+                </div>
+                <div class="err-msg">亮度必须在 0 ~ 999</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- signature: anatomy -->
+          <div class="anatomy" id="anatomy">
+            <div class="anatomy-top">
+              <div class="lbl">字节解剖 · Byte Anatomy</div>
+              <div class="hex-line" id="hexLine">CA 01 01 00 FF 35</div>
+            </div>
+            <div class="byte-groups" id="byteGroups">
+              <!-- filled by JS -->
+            </div>
+            <div class="legend">
+              <span><i style="background:var(--fixed-bg)"></i>固定段 · 协议固有</span>
+              <span><i style="background:var(--param-bg)"></i>参数段 · 我填的</span>
+              <span><i style="background:var(--comp-bg)"></i>计算段 · 系统 BCC</span>
+              <span><i style="background:var(--sel)"></i>联动高亮</span>
+            </div>
+          </div>
+
+          <div class="readable" id="readable">
+            帧头 <b>CA</b> · 命令 <b>01</b>（设置亮度）· 通道 <b>1</b> ·
+            亮度 <b>255</b>（字节 <b>00 FF</b>，大端）·
+            校验 <b>BCC = XOR(0..4) = 35</b>
+          </div>
+
+          <div class="dock">
+            <button class="btn btn-primary" id="btnCopyHex">⧉ 复制 HEX</button>
+            <button class="btn btn-outline" id="btnCopyAscii">复制 ASCII</button>
+            <button class="btn btn-ghost">导出到串口工具</button>
+            <div class="note">越界时复制按钮自动禁用 · <b>不直发设备</b></div>
+          </div>
+        </main>
+      </div>
+    </div>
+  </section>
+
+  <!-- ========================= STAGE 1 ========================= -->
+  <section class="stage" id="stage-1">
+    <div class="win">
+      <div class="win-bar">
+        <span class="app-icon">A</span>
+        <span class="title">CommandAtlas.exe — 研发本地录入</span>
+        <span class="spacer"></span>
+        <div class="win-actions"><i></i><i></i><i></i></div>
+      </div>
+
+      <div class="draft-bar">
+        <span class="name">草稿：brightness_set_v3</span>
+        <span class="chip-warn">本地未导出</span>
+        <span class="meta">基础提交 a1b2c3d4 · 修改 2 处</span>
+        <span style="flex:1"></span>
+        <button class="btn btn-ghost" style="height:34px;font-size:12.5px">校验全部</button>
+        <button class="btn btn-primary" style="height:34px;font-size:12.5px;min-width:120px">导出标准 JSON</button>
+      </div>
+
+      <div class="editor">
+        <aside class="tree">
+          <div class="grp">▾ 新协议</div>
+          <div class="item sel">· 亮度设置 <span class="dirty"></span></div>
+          <div class="item">· 读取版本</div>
+          <div class="item">· 读取设备 IP</div>
+          <div class="grp">▸ 旧协议（ASCII）</div>
+          <div class="grp">▸ 旧扩展（$/@）</div>
+          <button class="add-seg" style="width:100%;margin-top:12px">＋ 新建草稿</button>
+          <div class="l3">⚠ L3 破坏性指令不进入公开仓库，仅保留在研发现有受限资料。</div>
+        </aside>
+
+        <section class="form-main">
+          <div class="tabs-sm">
+            <span>身份</span><span>适用性</span><span class="on">帧段</span>
+            <span>参数</span><span>回复</span><span>风险</span><span>检索</span>
+          </div>
+          <div class="sec" style="font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:12px">
+            帧段编辑器 · 起始字节自动计算
+          </div>
+          <table class="seg-table">
+            <thead>
+              <tr><th>#</th><th>类型</th><th>定义</th><th>起始</th><th></th></tr>
+            </thead>
+            <tbody>
+              <tr><td class="off">0</td><td><span class="tag fixed">fixed</span></td><td class="off">CA</td><td class="off">0</td><td>⋮</td></tr>
+              <tr><td class="off">1</td><td><span class="tag fixed">fixed</span></td><td class="off">01</td><td class="off">1</td><td>⋮</td></tr>
+              <tr><td class="off">2</td><td><span class="tag param">param</span></td><td>channel · u8 · 1~40</td><td class="off">2</td><td>⋮</td></tr>
+              <tr><td class="off">3</td><td><span class="tag param">param</span></td><td>brightness · u16 BE · 0~999</td><td class="off">3</td><td>⋮</td></tr>
+              <tr><td class="off">5</td><td><span class="tag comp">computed</span></td><td class="off">BCC = XOR(0..4)</td><td class="off">5</td><td>⋮</td></tr>
+            </tbody>
+          </table>
+          <button class="add-seg">＋ 添加段（固定 / 参数 / 计算）</button>
+
+          <div style="margin-top:22px;font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:12px">
+            检索知识 · 研发必填
+          </div>
+          <div class="meta-grid" style="grid-template-columns:100px 1fr">
+            <div class="k">中文名称</div><div class="v" style="font-family:var(--ui);font-size:13px">设置通道亮度</div>
+            <div class="k">用户意图</div><div class="v" style="font-family:var(--ui);font-size:13px">设置某个通道的亮度</div>
+            <div class="k">别名</div><div class="v" style="font-family:var(--ui);font-size:13px">调光, 设亮度, 改亮度</div>
+            <div class="k">风险</div><div><span class="badge L1"><i></i>L1 可恢复设置</span></div>
+          </div>
+        </section>
+
+        <aside class="preview-col">
+          <div class="sec" style="font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:12px">
+            实时预览
+          </div>
+          <div class="anatomy" style="margin-top:0;padding:14px">
+            <div class="anatomy-top" style="margin-bottom:12px">
+              <div class="lbl">Frame</div>
+              <div class="hex-line">CA 01 01 00 FF 35</div>
+            </div>
+            <div class="byte-groups">
+              <div class="bgroup is-fixed">
+                <div class="glabel">头</div><div class="bracket"></div>
+                <div class="byte-row"><div class="byte fixed">CA</div></div>
+              </div>
+              <div class="bgroup is-fixed">
+                <div class="glabel">令</div><div class="bracket"></div>
+                <div class="byte-row"><div class="byte fixed">01</div></div>
+              </div>
+              <div class="bgroup is-param">
+                <div class="glabel">通道 <em>1</em></div><div class="bracket"></div>
+                <div class="byte-row"><div class="byte param">01</div></div>
+              </div>
+              <div class="bgroup is-param">
+                <div class="glabel">亮度 <em>255</em></div><div class="bracket"></div>
+                <div class="byte-row"><div class="byte param">00</div><div class="byte param">FF</div></div>
+              </div>
+              <div class="bgroup is-comp">
+                <div class="glabel">BCC</div><div class="bracket"></div>
+                <div class="byte-row"><div class="byte comp">35</div></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="sec" style="font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin:16px 0 10px">
+            黄金测试向量（2/3）
+          </div>
+          <div class="vec"><span class="st ok">✓</span>通道=1, 亮度=255 <span class="m">CA 01 01 00 FF 35</span></div>
+          <div class="vec"><span class="st ok">✓</span>通道=40, 亮度=999 <span class="m">CA 01 28 03 E7 …</span></div>
+          <div class="vec"><span class="st bad">✗</span>亮度=1000 <span class="m">越界，正确拒绝</span></div>
+          <div style="display:flex;gap:8px;margin-top:10px">
+            <button class="btn btn-outline" style="height:34px;font-size:12px;padding:0 12px">＋ 添加向量</button>
+            <button class="btn btn-ghost" style="height:34px;font-size:12px;padding:0 12px">校验全部</button>
+          </div>
+        </aside>
+      </div>
+    </div>
+  </section>
+
+  <!-- ========================= STAGE 2 ========================= -->
+  <section class="stage" id="stage-2">
+    <div class="win">
+      <div class="win-bar">
+        <span class="app-icon">A</span>
+        <span class="title">CommandAtlas.exe — 数据与同步</span>
+        <span class="spacer"></span>
+        <div class="win-actions"><i></i><i></i><i></i></div>
+      </div>
+      <div class="sync-page">
+        <div class="card">
+          <div class="status-big">
+            <span class="status-dot"></span>
+            <h3>已同步 · 本地快照可用</h3>
+            <span class="badge L0" style="margin-left:4px"><i></i>SHA-256 全部通过</span>
+            <span style="flex:1"></span>
+            <button class="btn btn-outline" style="height:36px;font-size:12.5px">立即检查更新</button>
+          </div>
+          <div class="meta-grid">
+            <div class="k">内容版本</div><div class="v">2026.09.28.1</div>
+            <div class="k">来源提交</div><div class="v">a1b2c3d4e5f60718…（main）</div>
+            <div class="k">上次成功</div><div class="v">2026-09-28 15:02:11</div>
+            <div class="k">失败策略</div><div class="v" style="font-family:var(--ui);font-size:12.5px">失败保留旧版，不伪装成功</div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>本地快照 · 当前激活高亮</h3>
+          <table class="snap-table">
+            <thead>
+              <tr><th>内容版本</th><th>来源提交</th><th>激活时间</th><th>状态</th><th></th></tr>
+            </thead>
+            <tbody>
+              <tr class="active"><td>2026.09.28.1</td><td>a1b2c3d4</td><td>09-28 15:02</td><td>当前使用中</td><td></td></tr>
+              <tr><td>2026.09.21.3</td><td>9f8e7d6c</td><td>09-21 10:11</td><td>上一份保留</td>
+                <td><button class="btn btn-ghost" style="height:28px;font-size:11.5px;padding:0 10px">回退</button></td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="card">
+          <h3>同步日志</h3>
+          <div class="log">
+            <span class="t">15:02:09</span> 查询 main 提交… 发现新提交 a1b2c3d4<br>
+            <span class="t">15:02:10</span> 下载 manifest / products / commands / synonyms<br>
+            <span class="t">15:02:11</span> <span class="ok">SHA-256 校验通过 · schema 兼容 · 黄金向量复验通过</span><br>
+            <span class="t">15:02:11</span> <span class="ok">原子激活 2026.09.28.1，旧快照已保留</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ========================= STAGE 3 ========================= -->
+  <section class="stage" id="stage-3">
+    <div class="grid-2">
+      <div class="point">
+        <h3><span class="n">1</span>主路径视觉终点：复制</h3>
+        <p>
+          <span class="before">三列等权 + 一排并列按钮</span> →
+          <span class="after">结果窄栏 + 解剖主舞台 + 底部粘性操作坞</span>。<br>
+          「复制 HEX」成为唯一实心主按钮，越界自动禁用，复制成功变绿 1.2s。
+        </p>
+      </div>
+      <div class="point">
+        <h3><span class="n">2</span>字节解剖图（签名组件）</h3>
+        <p>
+          多字节字段成组：上方括号标注中文名与当前值，下方字节坐标，点击参数框高亮对应字节。
+          亮度 u16 的两个字节在同一括号下，消除「第 4–5 字节是亮度」的脑补成本。
+        </p>
+      </div>
+      <div class="point">
+        <h3><span class="n">3</span>层级与字号</h3>
+        <p>
+          指令名 22px / 搜索 52px / 帧字节 15px Mono / 说明 13px。
+          机器数据一律等宽，与自然语言严格分家。现场小屏也扫得动。
+        </p>
+      </div>
+      <div class="point">
+        <h3><span class="n">4</span>语义色只服务产品约束</h3>
+        <p>
+          L0 绿 / L1 蓝 / L2 琥珀 / L3 红与同步四态保留原语义。
+          参数段用电光靛蓝实心——「我填的」永远最醒目；计算段紫、固定段灰蓝。
+        </p>
+        <div class="swatches">
+          <div class="sw"><div class="chip" style="background:#0F172A"></div><div class="nm">ink<br>#0F172A</div></div>
+          <div class="sw"><div class="chip" style="background:#2E4FE0"></div><div class="nm">accent<br>#2E4FE0</div></div>
+          <div class="sw"><div class="chip" style="background:#0B1220"></div><div class="nm">frame<br>#0B1220</div></div>
+          <div class="sw"><div class="chip" style="background:#5B3FD0"></div><div class="nm">computed<br>#5B3FD0</div></div>
+          <div class="sw"><div class="chip" style="background:#0F9D6A"></div><div class="nm">ok<br>#0F9D6A</div></div>
+          <div class="sw"><div class="chip" style="background:#C26A00"></div><div class="nm">warn<br>#C26A00</div></div>
+          <div class="sw"><div class="chip" style="background:#E8EDF4"></div><div class="nm">bg<br>#E8EDF4</div></div>
+        </div>
+      </div>
+      <div class="point">
+        <h3><span class="n">5</span>Atlas 意象收敛</h3>
+        <p>
+          去掉 Mac 红绿灯；窗口条为 Windows 风格。
+          深色解剖台叠加浅网格坐标，呼应「图集/图纸」，但不做装饰性地图。
+        </p>
+      </div>
+      <div class="point">
+        <h3><span class="n">6</span>与既有工具同族</h3>
+        <p>
+          4px 网格、胶囊徽章、等宽帧、状态条与串口/诊断工具同构；
+          区分色为 Atlas 靛蓝 <span class="after">#2E4FE0</span>。
+          建议 S4 以此覆盖当前 <code>theme.qss</code> 中已漂移的 #246ca5 主色。
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <p class="footnote">
+    静态高保真示意（可交互演示参数→帧联动）· 对应产品阶段 S1 主场景与 S2/S3 界面方向 ·
+    字体：微软雅黑 + Consolas（Windows 自带）·
+    源文件：<code>index.html</code> / <code>styles.css</code> / <code>app.js</code>
+  </p>
+</div>
+
+<div class="toast" id="toast"><span>✓</span><code id="toastCode">CA 01 01 00 FF 35</code><span>已复制</span></div>
+<script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,11 @@
+<RCC>
+    <qresource prefix="/catalog">
+        <file alias="manifest.json">catalog/manifest.json</file>
+        <file alias="products.json">catalog/products.json</file>
+        <file alias="commands.json">catalog/commands.json</file>
+        <file alias="synonyms.json">catalog/synonyms.json</file>
+    </qresource>
+    <qresource prefix="/ui">
+        <file alias="theme.qss">ui/theme.qss</file>
+    </qresource>
+</RCC>

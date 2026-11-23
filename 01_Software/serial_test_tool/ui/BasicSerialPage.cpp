@@ -15,24 +15,36 @@
 #include <QPlainTextEdit>
 #include <QPushButton>
 #include <QSettings>
+#include <QScrollBar>
+#include <QShowEvent>
+#include <QTimer>
 #include <QTextCursor>
 #include <QVBoxLayout>
 
 namespace {
 constexpr int kMaxMonitorBlocks = 1000;
+constexpr int kMaxMonitorBytes = 512;
+constexpr int kMonitorRefreshMs = 100;
 }
 
 BasicSerialPage::BasicSerialPage(IByteTransport *transport, QWidget *parent)
-    : QWidget(parent)
-    , m_transport(transport)
+    : QWidget(parent), m_transport(transport)
 {
     buildUi();
     loadSettings();
+    m_monitorTimer = new QTimer(this);
+    m_monitorTimer->setInterval(kMonitorRefreshMs);
+    m_monitorTimer->setSingleShot(true);
+    connect(m_monitorTimer, &QTimer::timeout, this, &BasicSerialPage::flushMonitor);
 
     connect(m_transport, &IByteTransport::bytesReceived, this, &BasicSerialPage::onBytesReceived);
     connect(m_transport, &IByteTransport::bytesSent, this, &BasicSerialPage::onBytesSent);
     connect(m_transport, &IByteTransport::portStateChanged, this, &BasicSerialPage::onPortStateChanged);
     connect(m_transport, &IByteTransport::offline, this, &BasicSerialPage::onOffline);
+    connect(m_transport, &IByteTransport::sendStarted, this, &BasicSerialPage::updateControlState);
+    connect(m_transport, &IByteTransport::sendCompleted, this, &BasicSerialPage::updateControlState);
+    connect(m_transport, &IByteTransport::sendFailed, this, &BasicSerialPage::updateControlState);
+    connect(m_transport, &IByteTransport::sendCancelled, this, &BasicSerialPage::updateControlState);
 
     connect(m_displayFormatCombo, &QComboBox::currentIndexChanged, this, &BasicSerialPage::saveSettings);
     connect(m_timestampCheck, &QCheckBox::toggled, this, &BasicSerialPage::saveSettings);
@@ -75,7 +87,8 @@ void BasicSerialPage::buildUi()
 
     m_monitor = new QPlainTextEdit(monitorGroup);
     m_monitor->setReadOnly(true);
-    m_monitor->setPlaceholderText(QStringLiteral("等待收发数据…\n请先在顶部连接设备，然后手动发送或启动自动测试。"));
+    m_monitor->setPlaceholderText(
+        QStringLiteral("等待收发数据…\n请先在顶部连接设备，然后手动发送或启动自动测试。"));
     m_monitor->setMaximumBlockCount(kMaxMonitorBlocks);
     m_monitor->setStyleSheet(QStringLiteral("font-family: Consolas, monospace;"));
     monitorLayout->addWidget(m_monitor, 1);
@@ -85,7 +98,8 @@ void BasicSerialPage::buildUi()
     auto *sendLayout = new QVBoxLayout(sendGroup);
     auto *sendOptions = new QHBoxLayout;
     m_sendEdit = new QLineEdit(sendGroup);
-    m_sendEdit->setPlaceholderText(QStringLiteral("HEX 例：CA 01 01 00 FF    ASCII 例：CST#（支持转义 \\r \\n \\t \\xNN）"));
+    m_sendEdit->setPlaceholderText(
+        QStringLiteral("HEX 例：CA 01 01 00 FF    ASCII 例：CST#（支持转义 \\r \\n \\t \\xNN）"));
     m_sendFormatCombo = new QComboBox(sendGroup);
     m_sendFormatCombo->addItem(QStringLiteral("HEX 发送"), QStringLiteral("hex"));
     m_sendFormatCombo->addItem(QStringLiteral("ASCII 发送"), QStringLiteral("ascii"));
@@ -155,14 +169,17 @@ void BasicSerialPage::sendManual()
     }
 
     QString error;
-    if (!m_transport->send(payload, &error)) {
+    if (!m_transport->requestSend(0, payload, 0, &error)) {
         QMessageBox::critical(this, QStringLiteral("发送失败"), error);
     }
+    updateControlState();
 }
 
 void BasicSerialPage::clearMonitor()
 {
+    m_monitorTimer->stop();
     m_records.clear();
+    m_pendingRecords = 0;
     m_monitor->clear();
 }
 
@@ -195,27 +212,56 @@ void BasicSerialPage::onSendFormatChanged()
     }
 }
 
-QString BasicSerialPage::formatRecord(const QString &direction, const QByteArray &data,
-                                      const QDateTime &time) const
+QString BasicSerialPage::formatRecord(const MonitorRecord &record) const
 {
     const bool hexDisplay = m_displayFormatCombo->currentData().toString() == QStringLiteral("hex");
-    const QString body = hexDisplay ? PacketBuilder::toHexText(data) : PacketBuilder::toAsciiText(data);
+    const QString body = hexDisplay ? PacketBuilder::toHexText(record.data)
+                                    : PacketBuilder::toAsciiText(record.data);
     QString line;
     if (m_timestampCheck->isChecked()) {
-        line += QStringLiteral("[%1] ").arg(time.toString(QStringLiteral("HH:mm:ss.zzz")));
+        line += QStringLiteral("[%1] ").arg(record.time.toString(QStringLiteral("HH:mm:ss.zzz")));
     }
-    line += QStringLiteral("%1 %2").arg(direction, body);
+    line += QStringLiteral("%1 %2").arg(record.dir, body);
+    if (record.originalSize > record.data.size()) {
+        line += QStringLiteral(" [显示前 %1 字节，共 %2 字节]").arg(record.data.size()).arg(record.originalSize);
+    }
     return line;
 }
 
 void BasicSerialPage::appendMonitorLine(const QString &direction, const QByteArray &data)
 {
-    const QDateTime now = QDateTime::currentDateTime();
-    m_records.append({direction, data, now});
+    m_records.append({direction, data.left(kMaxMonitorBytes), QDateTime::currentDateTime(), data.size()});
     if (m_records.size() > kMaxMonitorBlocks) {
-        m_records.remove(0, m_records.size() - kMaxMonitorBlocks);
+        m_records.removeFirst();
     }
-    m_monitor->appendPlainText(formatRecord(direction, data, now));
+    m_pendingRecords = qMin(m_pendingRecords + 1, m_records.size());
+    if (isVisible() && !m_monitorTimer->isActive()) {
+        m_monitorTimer->start();
+    }
+}
+
+void BasicSerialPage::showEvent(QShowEvent *event)
+{
+    QWidget::showEvent(event);
+    flushMonitor();
+}
+
+void BasicSerialPage::flushMonitor()
+{
+    if (!isVisible() || m_pendingRecords == 0) {
+        return;
+    }
+    QStringList lines;
+    lines.reserve(m_pendingRecords);
+    for (qsizetype i = m_records.size() - m_pendingRecords; i < m_records.size(); ++i) {
+        lines.append(formatRecord(m_records.at(i)));
+    }
+    m_pendingRecords = 0;
+    auto *scroll = m_monitor->verticalScrollBar();
+    const int oldValue = scroll->value();
+    const bool follow = oldValue == scroll->maximum();
+    m_monitor->appendPlainText(lines.join(QLatin1Char('\n')));
+    scroll->setValue(follow ? scroll->maximum() : oldValue);
 }
 
 void BasicSerialPage::rerenderMonitor()
@@ -223,8 +269,10 @@ void BasicSerialPage::rerenderMonitor()
     QStringList lines;
     lines.reserve(m_records.size());
     for (const MonitorRecord &r : m_records) {
-        lines << formatRecord(r.dir, r.data, r.time);
+        lines << formatRecord(r);
     }
+    m_pendingRecords = 0;
+    m_monitorTimer->stop();
     m_monitor->setPlainText(lines.join(QLatin1Char('\n')));
     m_monitor->moveCursor(QTextCursor::End);
 }
@@ -250,7 +298,7 @@ void BasicSerialPage::saveSettings()
 void BasicSerialPage::updateControlState()
 {
     const bool open = m_transport->isOpen();
-    const bool canSend = open && !m_testRunning;
+    const bool canSend = open && !m_testRunning && !m_transport->isSendPending();
     m_sendButton->setEnabled(canSend);
     m_sendEdit->setEnabled(!m_testRunning);
     m_sendFormatCombo->setEnabled(!m_testRunning);

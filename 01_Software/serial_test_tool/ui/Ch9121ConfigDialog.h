@@ -15,8 +15,10 @@ class Ch9121ConfigDialog : public QDialog
 public:
     Ch9121ConfigDialog(Ch9121ConfigClient *client, const Ch9121Config::DeviceSummary &device,
                        QWidget *parent = nullptr);
+
 protected:
     void reject() override;
+
 private:
     void load(const Ch9121Config::DeviceConfig &config);
     void read();

@@ -1,6 +1,7 @@
 #include "ui/CommandEditDialog.h"
 
 #include "core/CommandHistory.h"
+#include "core/PacketBuilder.h"
 
 #include <QCheckBox>
 #include <QComboBox>
@@ -14,8 +15,7 @@
 #include <QtGlobal>
 #include <QVBoxLayout>
 
-CommandEditDialog::CommandEditDialog(QWidget *parent)
-    : QDialog(parent)
+CommandEditDialog::CommandEditDialog(QWidget *parent) : QDialog(parent)
 {
     setWindowTitle(QStringLiteral("编辑指令"));
     setMinimumWidth(640);
@@ -42,7 +42,8 @@ CommandEditDialog::CommandEditDialog(QWidget *parent)
 
     m_sendFormat = new QComboBox(this);
     m_sendFormat->addItem(QStringLiteral("HEX"), QStringLiteral("hex"));
-    m_sendFormat->addItem(QStringLiteral("ASCII"), QStringLiteral("ascii"));
+    m_sendFormat->addItem(QStringLiteral("ASCII（转义）"), QStringLiteral("ascii_escaped"));
+    m_sendFormat->addItem(QStringLiteral("ASCII（旧设置）"), QStringLiteral("ascii"));
     m_sendData = new QLineEdit(this);
     m_sendData->setProperty("role", "code");
     m_sendData->setMinimumHeight(28);
@@ -50,10 +51,12 @@ CommandEditDialog::CommandEditDialog(QWidget *parent)
 
     m_replyFormat = new QComboBox(this);
     m_replyFormat->addItem(QStringLiteral("HEX"), QStringLiteral("hex"));
-    m_replyFormat->addItem(QStringLiteral("ASCII"), QStringLiteral("ascii"));
+    m_replyFormat->addItem(QStringLiteral("ASCII（转义）"), QStringLiteral("ascii_escaped"));
+    m_replyFormat->addItem(QStringLiteral("ASCII（旧设置）"), QStringLiteral("ascii"));
     m_reply = new QLineEdit(this);
     m_reply->setProperty("role", "code");
     m_reply->setMinimumHeight(28);
+    m_reply->setMaxLength(CommandItem::MaxFrameTextLength);
     m_fillReplyButton = new QPushButton(QStringLiteral("填入最近接收"), this);
     auto *replyRow = new QHBoxLayout;
     replyRow->addWidget(m_reply, 1);
@@ -76,8 +79,7 @@ CommandEditDialog::CommandEditDialog(QWidget *parent)
     form->addRow(QStringLiteral("说明"), m_description);
     form->addRow(QString(), m_enabled);
     form->addRow(QStringLiteral("备注"), m_remark);
-    auto *timeoutHint = new QLabel(
-        QStringLiteral("超时时间在「自动测试 → 测试设置」中调整。"), this);
+    auto *timeoutHint = new QLabel(QStringLiteral("超时时间在「自动测试 → 测试设置」中调整。"), this);
     timeoutHint->setStyleSheet(QStringLiteral("color:#666;"));
     form->addRow(QString(), timeoutHint);
     root->addLayout(form);
@@ -150,8 +152,14 @@ void CommandEditDialog::fillReplyFromLastRx()
                              QStringLiteral("还没有收到过数据。请先单发或手动发送，待设备回复后再填入。"));
         return;
     }
-    m_reply->setText(CommandHistory::formatReplyText(
-        m_lastRx, m_replyFormat->currentData().toString()));
+    QString format = m_replyFormat->currentData().toString();
+    const QString reply = CommandHistory::formatReplyText(m_lastRx, format);
+    if (reply.size() > m_reply->maxLength()) {
+        QMessageBox::warning(this, QStringLiteral("无法填入"), QStringLiteral("接收内容超过回复长度上限。"));
+        return;
+    }
+    m_replyFormat->setCurrentIndex(m_replyFormat->findData(format));
+    m_reply->setText(reply);
 }
 
 void CommandEditDialog::validateAndAccept()
@@ -162,6 +170,19 @@ void CommandEditDialog::validateAndAccept()
     }
     if (m_name->text().trimmed().isEmpty()) {
         QMessageBox::warning(this, QStringLiteral("校验失败"), QStringLiteral("指令名称不能为空。"));
+        return;
+    }
+    const CommandItem draft = item();
+    bool ok = true;
+    if (draft.sendFormat == QStringLiteral("ascii_escaped")) {
+        PacketBuilder::decodeCommandText(draft.sendFormat, draft.sendData, &ok);
+    }
+    if (ok && draft.expectedReplyFormat == QStringLiteral("ascii_escaped")) {
+        PacketBuilder::decodeCommandText(draft.expectedReplyFormat, draft.expectedReply, &ok);
+    }
+    if (!ok) {
+        QMessageBox::warning(this, QStringLiteral("转义格式错误"),
+                             QStringLiteral("发送内容或正确回复中的 \\x 后需跟两位十六进制，例如 \\x0D。"));
         return;
     }
     accept();

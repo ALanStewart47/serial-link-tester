@@ -21,13 +21,10 @@
 
 QString SettingsPage::defaultLogDir()
 {
-    return QStandardPaths::writableLocation(QStandardPaths::AppDataLocation)
-           + QStringLiteral("/logs");
+    return QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + QStringLiteral("/logs");
 }
 
-SettingsPage::SettingsPage(LogManager *log, QWidget *parent)
-    : QWidget(parent)
-    , m_log(log)
+SettingsPage::SettingsPage(LogManager *log, QWidget *parent) : QWidget(parent), m_log(log)
 {
     buildUi();
 
@@ -79,9 +76,9 @@ void SettingsPage::buildUi()
     m_fullLogCheck = new QCheckBox(QStringLiteral("保存全量日志（每轮收发都写文件，默认关闭）"), logGroup);
     form->addRow(QString(), m_fullLogCheck);
 
-    m_hint = new QLabel(QStringLiteral(
-        "统计汇总与异常明细会自动保存。\n"
-        "全量日志包含每轮收发内容，长时间测试会产生较大文件，按需开启即可。"), logGroup);
+    m_hint = new QLabel(QStringLiteral("统计汇总与异常明细会自动保存。\n"
+                                       "全量日志包含每轮收发内容，长时间测试会产生较大文件，按需开启即可。"),
+                        logGroup);
     m_hint->setWordWrap(true);
     m_hint->setStyleSheet(QStringLiteral("color: gray;"));
     form->addRow(QString(), m_hint);
@@ -95,8 +92,8 @@ void SettingsPage::buildUi()
 
 void SettingsPage::browseDir()
 {
-    const QString dir = QFileDialog::getExistingDirectory(this,
-        QStringLiteral("选择日志目录"), m_dirEdit->text());
+    const QString dir =
+        QFileDialog::getExistingDirectory(this, QStringLiteral("选择日志目录"), m_dirEdit->text());
     if (!dir.isEmpty()) {
         m_dirEdit->setText(dir);
         onDirChanged();

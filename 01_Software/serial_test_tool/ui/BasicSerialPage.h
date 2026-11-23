@@ -13,6 +13,8 @@ class QComboBox;
 class QLineEdit;
 class QPlainTextEdit;
 class QPushButton;
+class QShowEvent;
+class QTimer;
 
 // Page 1：收发监视 + 手动发送。串口开关在 MainWindow 顶栏 PortConnectionBar。
 class BasicSerialPage : public QWidget
@@ -23,6 +25,9 @@ public:
     explicit BasicSerialPage(IByteTransport *transport, QWidget *parent = nullptr);
 
     void setTestRunning(bool running);
+
+protected:
+    void showEvent(QShowEvent *event) override;
 
 private slots:
     void sendManual();
@@ -37,13 +42,23 @@ private slots:
 private:
     void buildUi();
     void appendMonitorLine(const QString &direction, const QByteArray &data);
-    QString formatRecord(const QString &direction, const QByteArray &data, const QDateTime &time) const;
+    void flushMonitor();
     void updateControlState();
     void loadSettings();
     void saveSettings();
 
-    struct MonitorRecord { QString dir; QByteArray data; QDateTime time; };
+    struct MonitorRecord
+    {
+        QString dir;
+        QByteArray data;
+        QDateTime time;
+        qsizetype originalSize;
+    };
+
+    QString formatRecord(const MonitorRecord &record) const;
     QVector<MonitorRecord> m_records;
+    qsizetype m_pendingRecords = 0;
+    QTimer *m_monitorTimer = nullptr;
 
     IByteTransport *m_transport = nullptr;
     bool m_testRunning = false;

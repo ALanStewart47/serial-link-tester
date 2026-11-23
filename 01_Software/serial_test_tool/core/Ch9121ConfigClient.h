@@ -10,23 +10,38 @@ class Ch9121ConfigClient : public QObject
 {
     Q_OBJECT
 public:
-    struct InterfaceInfo {
+    struct InterfaceInfo
+    {
         QString name, displayName;
         QHostAddress address, broadcast;
         QByteArray mac;
         uint index = 0;
     };
+
     // Injectable endpoints/timings allow loopback integration tests without hardware.
-    struct Options {
+    struct Options
+    {
         quint16 localPort = Ch9121Config::LocalPort;
         quint16 devicePort = Ch9121Config::DevicePort;
         int readTimeoutMs = 1000;
         int scanTimeoutMs = 1500;
         int verifyTimeoutMs = 15000;
+        QHostAddress limitedBroadcast = QHostAddress::Broadcast;
     };
     enum class State { Idle, Scanning, Reading, FreshRead, WaitingSetAck, SearchingVerify, ReadingVerify };
     Q_ENUM(State)
-    enum class Result { Scanned, Read, NoChange, Verified, Mismatch, Unconfirmed, Conflict, Rejected, Error, Cancelled };
+    enum class Result {
+        Scanned,
+        Read,
+        NoChange,
+        Verified,
+        Mismatch,
+        Unconfirmed,
+        Conflict,
+        Rejected,
+        Error,
+        Cancelled
+    };
     Q_ENUM(Result)
 
     explicit Ch9121ConfigClient(QObject *parent = nullptr);
@@ -37,8 +52,11 @@ public:
     bool readConfig(const QByteArray &mac);
     bool writeConfig(const Ch9121Config::DeviceConfig &baseline, const Ch9121Config::ConfigEdits &edits);
     void cancel();
+
     bool busy() const { return m_state != State::Idle; }
+
     State state() const { return m_state; }
+
     bool writeSent() const { return m_writeSent; }
 
 signals:
@@ -50,7 +68,7 @@ signals:
 
 private:
     bool begin(State state);
-    bool send(const QByteArray &packet);
+    bool send(const QByteArray &packet, const QHostAddress &additionalDestination = {});
     void requestGet(State state);
     void searchForVerification();
     void onReadyRead();

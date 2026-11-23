@@ -2,6 +2,7 @@
 
 #include <QWidget>
 
+struct CommandItem;
 class CommandLibrary;
 class IByteTransport;
 
@@ -19,6 +20,8 @@ class CommandLibraryPage : public QWidget
 
 public:
     CommandLibraryPage(CommandLibrary *library, IByteTransport *transport, QWidget *parent = nullptr);
+signals:
+    void multichannelRequested();
 
 private slots:
     void reload();
@@ -37,10 +40,10 @@ private slots:
 private:
     void buildUi();
     QString selectedCommandId() const;
-    bool matchesFilter(const QString &commandId) const;
 
     CommandLibrary *m_library = nullptr;
     IByteTransport *m_transport = nullptr;
+    QString m_pendingCommandId;
 
     QLineEdit *m_searchEdit = nullptr;
     QTreeWidget *m_tree = nullptr;

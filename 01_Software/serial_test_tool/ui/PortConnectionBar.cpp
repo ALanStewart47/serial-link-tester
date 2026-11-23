@@ -21,9 +21,7 @@
 #include <QStackedWidget>
 #include <QVBoxLayout>
 
-PortConnectionBar::PortConnectionBar(LinkHub *link, QWidget *parent)
-    : QWidget(parent)
-    , m_link(link)
+PortConnectionBar::PortConnectionBar(LinkHub *link, QWidget *parent) : QWidget(parent), m_link(link)
 {
     m_configClient = new Ch9121ConfigClient(this);
     buildUi();
@@ -32,26 +30,35 @@ PortConnectionBar::PortConnectionBar(LinkHub *link, QWidget *parent)
     refreshInterfaces();
     connect(m_configClient, &Ch9121ConfigClient::deviceDiscovered, this,
             [this](const Ch9121Config::DeviceSummary &device) {
-        int index = -1;
-        for (int i = 0; i < m_devices.size(); ++i) if (m_devices[i].mac == device.mac) { index = i; break; }
-        if (index < 0) m_devices.append(device); else m_devices[index] = device;
-        onDeviceDiscovered(device.id, device.ip.toString(), Ch9121Config::formatMac(device.mac));
-    });
+                int index = -1;
+                for (int i = 0; i < m_devices.size(); ++i)
+                    if (m_devices[i].mac == device.mac) {
+                        index = i;
+                        break;
+                    }
+                if (index < 0)
+                    m_devices.append(device);
+                else
+                    m_devices[index] = device;
+                onDeviceDiscovered(device.id, device.ip.toString(), Ch9121Config::formatMac(device.mac));
+            });
     connect(m_configClient, &Ch9121ConfigClient::configRead, this,
             [this](const Ch9121Config::DeviceConfig &config) {
-        Ch9121Config::DeviceSummary summary{config.id, config.ip, config.mac, config.softwareVersion};
-        for (auto &device : m_devices) if (device.mac == config.mac) device = summary;
-        onDeviceDiscovered(config.id, config.ip.toString(), Ch9121Config::formatMac(config.mac));
-    });
+                Ch9121Config::DeviceSummary summary{config.id, config.ip, config.mac, config.softwareVersion};
+                for (auto &device : m_devices)
+                    if (device.mac == config.mac)
+                        device = summary;
+                onDeviceDiscovered(config.id, config.ip.toString(), Ch9121Config::formatMac(config.mac));
+            });
     connect(m_configClient, &Ch9121ConfigClient::finished, this,
             [this](Ch9121ConfigClient::Result result, const QString &message) {
-        if (m_scanning) {
-            onScanFinished();
-            if (result == Ch9121ConfigClient::Result::Error)
-                QMessageBox::warning(this, QStringLiteral("扫描失败"), message);
-        }
-        updateControlState();
-    });
+                if (m_scanning) {
+                    onScanFinished();
+                    if (result == Ch9121ConfigClient::Result::Error)
+                        QMessageBox::warning(this, QStringLiteral("扫描失败"), message);
+                }
+                updateControlState();
+            });
     connect(m_configClient, &Ch9121ConfigClient::logMessage, m_link, &IByteTransport::logMessage);
 
     connect(m_link, &IByteTransport::portStateChanged, this, &PortConnectionBar::onPortStateChanged);
@@ -62,7 +69,9 @@ PortConnectionBar::PortConnectionBar(LinkHub *link, QWidget *parent)
     connect(m_parityCombo, &QComboBox::currentIndexChanged, this, &PortConnectionBar::saveSettings);
     connect(m_stopBitsCombo, &QComboBox::currentIndexChanged, this, &PortConnectionBar::saveSettings);
     connect(m_ifaceCombo, &QComboBox::currentIndexChanged, this, [this] {
-        clearDevices(); saveSettings(); updateControlState();
+        clearDevices();
+        saveSettings();
+        updateControlState();
     });
     connect(m_ipEdit, &QLineEdit::textChanged, this, &PortConnectionBar::saveSettings);
     connect(m_tcpPortSpin, &QSpinBox::valueChanged, this, &PortConnectionBar::saveSettings);
@@ -91,8 +100,9 @@ void PortConnectionBar::buildUi()
 
     m_serialRadio = new QRadioButton(QStringLiteral("串口"), this);
     m_networkRadio = new QRadioButton(QStringLiteral("网口"), this);
-    m_networkRadio->setToolTip(QStringLiteral(
-        "CH9121 UDP 扫描后 TCP 透传，字节与串口等价。扫描选中设备后，可在断开连接时配置网络地址和端口1串口参数。"));
+    m_networkRadio->setToolTip(
+        QStringLiteral("CH9121 UDP 扫描后 TCP "
+                       "透传，字节与串口等价。扫描选中设备后，可在断开连接时配置网络地址和端口1串口参数。"));
     auto *modeGroup = new QButtonGroup(this);
     modeGroup->setExclusive(true);
     modeGroup->addButton(m_serialRadio, 0);
@@ -113,8 +123,8 @@ void PortConnectionBar::buildUi()
     m_refreshButton = new QPushButton(QStringLiteral("刷新"), serialRow);
 
     m_baudCombo = new QComboBox(serialRow);
-    const QList<int> baudRates = {4800, 9600, 14400, 19200, 28800, 38400, 57600, 115200,
-                                  230400, 460800, 921600};
+    const QList<int> baudRates = {4800,  9600,   14400,  19200,  28800, 38400,
+                                  57600, 115200, 230400, 460800, 921600};
     for (int baud : baudRates) {
         m_baudCombo->addItem(QString::number(baud), baud);
     }
@@ -236,8 +246,8 @@ void PortConnectionBar::refreshPorts()
     const QList<QSerialPortInfo> ports = QSerialPortInfo::availablePorts();
     for (const QSerialPortInfo &port : ports) {
         const QString label = port.description().isEmpty()
-            ? port.portName()
-            : QStringLiteral("%1 - %2").arg(port.portName(), port.description());
+                                  ? port.portName()
+                                  : QStringLiteral("%1 - %2").arg(port.portName(), port.description());
         m_portCombo->addItem(label, port.portName());
     }
 
@@ -271,14 +281,18 @@ void PortConnectionBar::refreshInterfaces()
     // Migrate the previous interface-only settings key to interface + IPv4.
     if (index < 0 && !stored.contains(QLatin1Char('|'))) {
         for (int i = 0; i < ifaces.size(); ++i) {
-            if (ifaces[i].name.section(QLatin1Char('|'), 0, 0) == stored) { index = i; break; }
+            if (ifaces[i].name.section(QLatin1Char('|'), 0, 0) == stored) {
+                index = i;
+                break;
+            }
         }
     }
     if (index >= 0) {
         m_ifaceCombo->setCurrentIndex(index);
     }
     m_ifaceCombo->blockSignals(false);
-    if (m_ifaceCombo->currentData().toString() != remembered) clearDevices();
+    if (m_ifaceCombo->currentData().toString() != remembered)
+        clearDevices();
 }
 
 void PortConnectionBar::clearDevices()
@@ -292,16 +306,20 @@ bool PortConnectionBar::selectConfigInterface()
 {
     const QString key = m_ifaceCombo->currentData().toString();
     for (const auto &iface : Ch9121ConfigClient::availableInterfaces()) {
-        if (iface.name == key) return m_configClient->setInterface(iface);
+        if (iface.name == key)
+            return m_configClient->setInterface(iface);
     }
-    QMessageBox::warning(this, QStringLiteral("网卡不可用"), QStringLiteral("所选网卡已不可用，请重新切换到网口模式刷新网卡。"));
+    QMessageBox::warning(this, QStringLiteral("网卡不可用"),
+                         QStringLiteral("所选网卡已不可用，请重新切换到网口模式刷新网卡。"));
     return false;
 }
 
 void PortConnectionBar::startScan()
 {
-    if (m_testRunning || m_configuring || m_configClient->busy() || m_link->isConnecting()) return;
-    if (!selectConfigInterface()) return;
+    if (m_testRunning || m_configuring || m_configClient->busy() || m_link->isConnecting())
+        return;
+    if (!selectConfigInterface())
+        return;
     clearDevices();
     m_scanning = true;
     updateControlState();
@@ -310,16 +328,21 @@ void PortConnectionBar::startScan()
 
 void PortConnectionBar::configureDevice()
 {
-    if (m_testRunning || m_scanning || m_configuring || m_link->isOpen() || m_link->isConnecting()) return;
+    if (m_testRunning || m_scanning || m_configuring || m_link->isOpen() || m_link->isConnecting())
+        return;
     const auto mac = m_deviceCombo->currentData(Qt::UserRole + 1).toByteArray();
     for (const auto &device : m_devices) {
-        if (device.mac != mac) continue;
-        if (!selectConfigInterface()) return;
+        if (device.mac != mac)
+            continue;
+        if (!selectConfigInterface())
+            return;
         const auto selected = device;
-        m_configuring = true; updateControlState();
+        m_configuring = true;
+        updateControlState();
         Ch9121ConfigDialog dialog(m_configClient, selected, this);
         dialog.exec();
-        m_configuring = false; updateControlState();
+        m_configuring = false;
+        updateControlState();
         return;
     }
 }
@@ -344,7 +367,8 @@ void PortConnectionBar::onDeviceDiscovered(const QString &id, const QString &ip,
         m_deviceCombo->setItemText(index, label);
         m_deviceCombo->setItemData(index, ip);
     }
-    if (index == m_deviceCombo->currentIndex()) m_ipEdit->setText(ip);
+    if (index == m_deviceCombo->currentIndex())
+        m_ipEdit->setText(ip);
     updateControlState();
 }
 
@@ -427,9 +451,8 @@ void PortConnectionBar::toggleTcp()
 
 void PortConnectionBar::onPortStateChanged(bool)
 {
-    m_openButton->setText(m_link->serial().isOpen()
-                               ? QStringLiteral("关闭串口")
-                               : QStringLiteral("打开串口"));
+    m_openButton->setText(m_link->serial().isOpen() ? QStringLiteral("关闭串口")
+                                                    : QStringLiteral("打开串口"));
     updateControlState();
 }
 
@@ -489,7 +512,8 @@ void PortConnectionBar::updateControlState()
     m_ipEdit->setEnabled(canEdit);
     m_tcpPortSpin->setEnabled(canEdit);
     m_tcpButton->setEnabled(!m_testRunning && !m_scanning && !m_configuring);
-    m_configButton->setEnabled(networkMode() && canEdit
+    m_configButton->setEnabled(
+        networkMode() && canEdit
         && Ch9121Config::isValidMac(m_deviceCombo->currentData(Qt::UserRole + 1).toByteArray()));
 
     if (connecting) {

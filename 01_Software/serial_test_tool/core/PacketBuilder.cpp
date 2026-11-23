@@ -1,6 +1,19 @@
 #include "core/PacketBuilder.h"
 
 namespace PacketBuilder {
+namespace {
+int hexDigit(QChar character)
+{
+    const ushort value = character.unicode();
+    if (value >= '0' && value <= '9')
+        return value - '0';
+    if (value >= 'A' && value <= 'F')
+        return value - 'A' + 10;
+    if (value >= 'a' && value <= 'f')
+        return value - 'a' + 10;
+    return -1;
+}
+} // namespace
 
 QByteArray fromHexText(const QString &text, bool *ok)
 {
@@ -13,11 +26,7 @@ QByteArray fromHexText(const QString &text, bool *ok)
         }
         // 只接受 ASCII 十六进制字符。不要把 QChar 转成可能为负的 char 再交给 isxdigit()
         // （非 ASCII 字符会触发未定义行为）。
-        const ushort u = c.unicode();
-        const bool isHex = (u >= '0' && u <= '9')
-                           || (u >= 'A' && u <= 'F')
-                           || (u >= 'a' && u <= 'f');
-        if (!isHex) {
+        if (hexDigit(c) < 0) {
             if (ok != nullptr) {
                 *ok = false;
             }
@@ -37,15 +46,7 @@ QByteArray fromHexText(const QString &text, bool *ok)
     QByteArray out;
     out.reserve(hex.size() / 2);
     for (int i = 0; i < hex.size(); i += 2) {
-        bool byteOk = false;
-        const int value = hex.mid(i, 2).toInt(&byteOk, 16);
-        if (!byteOk) {
-            if (ok != nullptr) {
-                *ok = false;
-            }
-            return {};
-        }
-        out.append(static_cast<char>(value));
+        out.append(static_cast<char>(hexDigit(hex.at(i)) * 16 + hexDigit(hex.at(i + 1))));
     }
 
     if (ok != nullptr) {
@@ -79,23 +80,36 @@ QByteArray fromAsciiEscaped(const QString &text, bool *ok)
         }
         const QChar n = text.at(++i);
         switch (n.toLatin1()) {
-        case 'r': out.append('\r'); break;
-        case 'n': out.append('\n'); break;
-        case 't': out.append('\t'); break;
-        case '0': out.append('\0'); break;
-        case '\\': out.append('\\'); break;
-        case 'x': case 'X': {
+        case 'r':
+            out.append('\r');
+            break;
+        case 'n':
+            out.append('\n');
+            break;
+        case 't':
+            out.append('\t');
+            break;
+        case '0':
+            out.append('\0');
+            break;
+        case '\\':
+            out.append('\\');
+            break;
+        case 'x':
+        case 'X': {
             if (i + 2 >= text.size()) {
-                if (ok) *ok = false;
+                if (ok)
+                    *ok = false;
                 return {};
             }
-            bool byteOk = false;
-            const int v = text.mid(i + 1, 2).toInt(&byteOk, 16);
-            if (!byteOk) {
-                if (ok) *ok = false;
+            const int high = hexDigit(text.at(i + 1));
+            const int low = hexDigit(text.at(i + 2));
+            if (high < 0 || low < 0) {
+                if (ok)
+                    *ok = false;
                 return {};
             }
-            out.append(static_cast<char>(v));
+            out.append(static_cast<char>(high * 16 + low));
             i += 2;
             break;
         }
@@ -107,6 +121,19 @@ QByteArray fromAsciiEscaped(const QString &text, bool *ok)
         }
     }
     return out;
+}
+
+QByteArray decodeCommandText(const QString &format, const QString &text, bool *ok)
+{
+    if (format == QStringLiteral("hex"))
+        return fromHexText(text, ok);
+    if (format == QStringLiteral("ascii_escaped"))
+        return fromAsciiEscaped(text, ok);
+
+    const bool valid = format == QStringLiteral("ascii");
+    if (ok)
+        *ok = valid;
+    return valid ? fromAsciiText(text) : QByteArray{};
 }
 
 quint8 bccXor(const QByteArray &data)
@@ -134,7 +161,8 @@ QString toHexText(const QByteArray &data)
             out.append(QLatin1Char(' '));
         }
         out.append(QString::number(static_cast<quint8>(data.at(i)), 16)
-                       .rightJustified(2, QLatin1Char('0')).toUpper());
+                       .rightJustified(2, QLatin1Char('0'))
+                       .toUpper());
     }
     return out;
 }

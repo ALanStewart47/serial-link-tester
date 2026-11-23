@@ -4,26 +4,32 @@
 #include "core/CommandHistory.h"
 #include "core/CommandItem.h"
 #include "core/CommandLibrary.h"
-#include "core/PacketBuilder.h"
 #include "core/IByteTransport.h"
+#include "core/PacketBuilder.h"
+#include "core/PlanAssessment.h"
+#include "core/TestPlan.h"
 #include "core/TestVerdict.h"
+#include "ui/CommandTreeBuilder.h"
+#include "ui/MultichannelDialog.h"
+#include "ui/TestStatsTables.h"
 
-#include <QAbstractScrollArea>
-#include <QAbstractItemView>
 #include <QAbstractItemModel>
+#include <QAbstractItemView>
+#include <QAbstractScrollArea>
 #include <QBrush>
 #include <QButtonGroup>
 #include <QCheckBox>
 #include <QColor>
 #include <QComboBox>
+#include <QDir>
 #include <QDoubleSpinBox>
 #include <QEvent>
+#include <QFileDialog>
 #include <QFormLayout>
 #include <QGridLayout>
 #include <QGroupBox>
-#include <QHash>
-#include <QHeaderView>
 #include <QHBoxLayout>
+#include <QHeaderView>
 #include <QLabel>
 #include <QLineEdit>
 #include <QListWidget>
@@ -32,32 +38,29 @@
 #include <QProgressBar>
 #include <QPushButton>
 #include <QRadioButton>
-#include <QSettings>
 #include <QScrollArea>
-#include <QTabWidget>
+#include <QSettings>
 #include <QShowEvent>
 #include <QSignalBlocker>
 #include <QSpinBox>
 #include <QSplitter>
+#include <QStandardPaths>
 #include <QStringList>
+#include <QTabWidget>
 #include <QTableWidget>
 #include <QTimer>
 #include <QTreeWidget>
 #include <QTreeWidgetItem>
 #include <QTreeWidgetItemIterator>
-#include <QVector>
 #include <QVBoxLayout>
-
-#include <algorithm>
+#include <QVector>
 
 namespace {
 constexpr int kRefreshMs = 200;
 constexpr int kVerdictRefreshMs = 1000;
 constexpr int kIdRole = Qt::UserRole + 1;
-const QStringList kProtocolOrder = {QStringLiteral("new"), QStringLiteral("old"),
-                                       QStringLiteral("old_ext")};
-const QStringList kGroupOrder = {QStringLiteral("digital"), QStringLiteral("strobe"),
-                                  QStringLiteral("common"), QStringLiteral("program")};
+constexpr int kSnapshotRole = Qt::UserRole + 2;
+constexpr int kStoreIndexRole = Qt::UserRole + 3;
 
 QString formatEta(double sec)
 {
@@ -67,20 +70,15 @@ QString formatEta(double sec)
         return QStringLiteral("%1 小时 %2 分").arg(h).arg(m);
     }
     if (sec >= 60) {
-        return QStringLiteral("%1 分 %2 秒")
-            .arg(static_cast<int>(sec) / 60)
-            .arg(static_cast<int>(sec) % 60);
+        return QStringLiteral("%1 分 %2 秒").arg(static_cast<int>(sec) / 60).arg(static_cast<int>(sec) % 60);
     }
     return QStringLiteral("%1 秒").arg(sec, 0, 'f', 1);
 }
 } // namespace
 
-AutoSendPage::AutoSendPage(CommandLibrary *library, AutoSendEngine *engine,
-                           IByteTransport *transport, QWidget *parent)
-    : QWidget(parent)
-    , m_library(library)
-    , m_engine(engine)
-    , m_transport(transport)
+AutoSendPage::AutoSendPage(CommandLibrary *library, AutoSendEngine *engine, IByteTransport *transport,
+                           QWidget *parent)
+    : QWidget(parent), m_library(library), m_engine(engine), m_transport(transport)
 {
     buildUi();
 
@@ -94,98 +92,37 @@ AutoSendPage::AutoSendPage(CommandLibrary *library, AutoSendEngine *engine,
     reloadCommands();
     loadSettings();
     onCommandChanged();
+    updateModeControlsEnabled();
+    updateStopModeControlsEnabled();
     onTimeoutModeChanged();
-    onModeChanged();
-    onStopModeChanged();
+    updateVerdict();
     refreshStats();
 
-    connect(m_intervalSpin, &QSpinBox::valueChanged, this, &AutoSendPage::saveSettings);
-    connect(m_countSpin, &QSpinBox::valueChanged, this, &AutoSendPage::saveSettings);
-    connect(m_durationSpin, &QSpinBox::valueChanged, this, &AutoSendPage::saveSettings);
-    connect(m_durationUnit, &QComboBox::currentIndexChanged, this, &AutoSendPage::saveSettings);
-    connect(m_durationUnit, &QComboBox::currentIndexChanged, this, [this] {
-        const QString u = m_durationUnit->currentData().toString();
-        const int v = m_durationSpin->value();
-        if (u == QStringLiteral("hour")) {
-            m_durationSpin->setRange(1, 48);
-        } else if (u == QStringLiteral("min")) {
-            m_durationSpin->setRange(1, 2880);
-        } else {
-            m_durationSpin->setRange(1, 172800);
-        }
-        m_durationSpin->setValue(qBound(m_durationSpin->minimum(), v, m_durationSpin->maximum()));
-    });
-    connect(m_timeoutModeCombo, &QComboBox::currentIndexChanged, this, &AutoSendPage::saveSettings);
-    connect(m_timeoutSpin, &QSpinBox::valueChanged, this, &AutoSendPage::saveSettings);
-    connect(m_passMinSuccess, &QDoubleSpinBox::valueChanged, this, &AutoSendPage::saveSettings);
-    connect(m_passMaxLoss, &QDoubleSpinBox::valueChanged, this, &AutoSendPage::saveSettings);
+    connectSignals();
 }
 
 void AutoSendPage::showEvent(QShowEvent *event)
 {
     QWidget::showEvent(event);
-    reloadCommands();
+    if (!m_engine->isRunning()
+        && (CommandHistory::favoriteIds() != m_cachedFavorites
+            || CommandHistory::recentIds() != m_cachedRecents)) {
+        reloadCommands();
+    }
     QSettings s(AppConfig::Org(), AppConfig::App());
     const QSignalBlocker blocker(m_fullLogCheck);
     m_fullLogCheck->setChecked(s.value(AppConfig::Key::FullLog, false).toBool());
+    if (m_engine->isRunning()) {
+        refreshStats();
+    }
 }
 
 bool AutoSendPage::eventFilter(QObject *watched, QEvent *event)
 {
     if (m_playlist && watched == m_playlist->viewport() && event->type() == QEvent::Drop) {
-        QTimer::singleShot(0, this, [this] {
-            refreshPlaylistLabels();
-            saveSettings();
-        });
+        QTimer::singleShot(0, this, [this] { syncPlaylistFromDragDrop(); });
     }
     return QWidget::eventFilter(watched, event);
-}
-
-void AutoSendPage::loadSettings()
-{
-    QSettings s(AppConfig::Org(), AppConfig::App());
-    const QStringList savedPlaylist = s.value(AppConfig::Key::AutoPlaylistIds).toStringList();
-    m_intervalSpin->setValue(s.value(AppConfig::Key::AutoInterval, 100).toInt());
-    m_countSpin->setValue(s.value(AppConfig::Key::AutoCount, 100).toInt());
-    const bool detect = s.value(AppConfig::Key::AutoDetection, true).toBool();
-    m_detectRadio->setChecked(detect);
-    m_stressRadio->setChecked(!detect);
-    m_timeoutModeCombo->setCurrentIndex(
-        s.value(AppConfig::Key::AutoTimeoutMode, 0).toInt() == 1 ? 1 : 0);
-    m_timeoutSpin->setValue(s.value(AppConfig::Key::AutoTimeoutMs, 200).toInt());
-    const bool byDuration = s.value(AppConfig::Key::AutoStopMode, 0).toInt() == 1;
-    m_stopDurationRadio->setChecked(byDuration);
-    m_stopCountRadio->setChecked(!byDuration);
-    applyDurationMsToUi(s.value(AppConfig::Key::AutoDurationMs, 10 * 60 * 1000).toInt());
-    m_passMinSuccess->setValue(s.value(AppConfig::Key::PassMinSuccess, 99.0).toDouble());
-    m_passMaxLoss->setValue(s.value(AppConfig::Key::PassMaxLoss, 1.0).toDouble());
-    m_fullLogCheck->setChecked(s.value(AppConfig::Key::FullLog, false).toBool());
-    restorePlaylist(savedPlaylist);
-    const QString savedCmd = s.value(AppConfig::Key::AutoCommandId).toString();
-    selectTreeCommand(savedCmd);
-    if (m_playlist->count() > 0) {
-        m_previewFromPlaylist = true;
-        m_playlist->setCurrentRow(0);
-    }
-    saveSettings();
-}
-
-void AutoSendPage::saveSettings()
-{
-    QSettings s(AppConfig::Org(), AppConfig::App());
-    s.setValue(AppConfig::Key::AutoInterval, m_intervalSpin->value());
-    s.setValue(AppConfig::Key::AutoCount, m_countSpin->value());
-    s.setValue(AppConfig::Key::AutoDetection, detectionEnabled());
-    s.setValue(AppConfig::Key::AutoTimeoutMode,
-               m_timeoutModeCombo->currentData().toString() == QStringLiteral("manual") ? 1 : 0);
-    s.setValue(AppConfig::Key::AutoTimeoutMs, m_timeoutSpin->value());
-    s.setValue(AppConfig::Key::AutoCommandId, currentCommandId());
-    s.setValue(AppConfig::Key::AutoPlaylistIds, playlistIds());
-    s.setValue(AppConfig::Key::AutoStopMode, m_stopDurationRadio->isChecked() ? 1 : 0);
-    s.setValue(AppConfig::Key::AutoDurationMs, durationMsFromUi());
-    s.setValue(AppConfig::Key::PassMinSuccess, m_passMinSuccess->value());
-    s.setValue(AppConfig::Key::PassMaxLoss, m_passMaxLoss->value());
-    s.setValue(AppConfig::Key::FullLog, m_fullLogCheck->isChecked());
 }
 
 void AutoSendPage::buildUi()
@@ -198,37 +135,78 @@ void AutoSendPage::buildUi()
     body->setChildrenCollapsible(false);
     body->setHandleWidth(6);
     root->addWidget(body, 1);
-    auto *details = new QWidget;
-    auto *detailLayout = new QVBoxLayout(details);
-    detailLayout->setContentsMargins(6, 0, 6, 0);
-    detailLayout->setSpacing(10);
-    auto *scroll = new QScrollArea;
-    scroll->setWidgetResizable(true);
-    scroll->setWidget(details);
-    scroll->setMinimumWidth(430);
-    auto *runDetails = new QWidget;
-    auto *runLayout = new QVBoxLayout(runDetails);
-    runLayout->setContentsMargins(6, 0, 6, 0);
-    runLayout->setSpacing(10);
-    auto *runScroll = new QScrollArea;
-    runScroll->setWidgetResizable(true);
-    runScroll->setWidget(runDetails);
-    auto *detailTabs = new QTabWidget;
-    detailTabs->addTab(scroll, QStringLiteral("测试设置"));
-    detailTabs->addTab(runScroll, QStringLiteral("实时统计"));
-    connect(m_engine, &AutoSendEngine::stateChanged, detailTabs,
-            [detailTabs](AutoSendEngine::State state, const QString &) {
-        if (state == AutoSendEngine::State::Running) detailTabs->setCurrentIndex(1);
-    });
 
-    auto *cmdGroup = new QGroupBox(QStringLiteral("轮询清单"), this);
+    auto *detailTabs = new QTabWidget;
+    detailTabs->addTab(buildSettingsTab(), QStringLiteral("测试设置"));
+    detailTabs->addTab(buildLiveStatsTab(), QStringLiteral("实时统计"));
+    connect(m_engine, &AutoSendEngine::started, detailTabs, [detailTabs] { detailTabs->setCurrentIndex(1); });
+
+    body->addWidget(buildPlaylistPanel(this));
+    body->addWidget(detailTabs);
+    body->setStretchFactor(0, 3);
+    body->setStretchFactor(1, 2);
+    body->setSizes({710, 480});
+
+    auto *ctrlLayout = new QHBoxLayout;
+    m_startButton = new QPushButton(QStringLiteral("开始测试"), this);
+    m_startButton->setProperty("role", "primary");
+    m_startButton->setMinimumWidth(132);
+    m_pauseButton = new QPushButton(QStringLiteral("暂停"), this);
+    m_pauseButton->setObjectName(QStringLiteral("pauseTest"));
+    m_pauseButton->setEnabled(false);
+    m_stopButton = new QPushButton(QStringLiteral("停止"), this);
+    m_stopButton->setProperty("role", "danger");
+    m_stopButton->setEnabled(false);
+    m_fullLogCheck = new QCheckBox(QStringLiteral("保存全量日志"), this);
+    m_fullLogCheck->setToolTip(QStringLiteral("勾选后每一轮收发都写入日志文件，体积较大，默认关闭。"));
+    m_stateLabel = new QLabel(QStringLiteral("状态：空闲"), this);
+    ctrlLayout->addWidget(m_startButton);
+    ctrlLayout->addWidget(m_pauseButton);
+    ctrlLayout->addWidget(m_stopButton);
+    ctrlLayout->addSpacing(12);
+    ctrlLayout->addWidget(m_fullLogCheck);
+    ctrlLayout->addSpacing(16);
+    ctrlLayout->addWidget(m_stateLabel);
+    ctrlLayout->addStretch(1);
+    root->addLayout(ctrlLayout);
+
+    m_progress = new QProgressBar(this);
+    m_progress->setTextVisible(false);
+    m_progress->setRange(0, 100);
+    m_progress->setValue(0);
+    root->addWidget(m_progress);
+
+    m_etaLabel = new QLabel(QStringLiteral("剩余 - / 预计 -"), this);
+    m_etaLabel->setStyleSheet(QStringLiteral("color:#555;"));
+    root->addWidget(m_etaLabel);
+}
+
+QWidget *AutoSendPage::buildPlaylistPanel(QWidget *parent)
+{
+    auto *cmdGroup = new QGroupBox(QStringLiteral("轮询清单"), parent);
     auto *cmdLayout = new QVBoxLayout(cmdGroup);
-    auto *hint = new QLabel(QStringLiteral(
-        "选择指令加入清单，按右侧顺序循环发送。支持多选、双击加入和拖动排序。"),
-        cmdGroup);
+    auto *hint = new QLabel(
+        QStringLiteral("选择指令加入清单，按右侧顺序循环发送。支持多选、双击加入和拖动排序。"), cmdGroup);
     hint->setWordWrap(true);
     hint->setStyleSheet(QStringLiteral("color:#666;"));
     cmdLayout->addWidget(hint);
+
+    auto *planBar = new QHBoxLayout;
+    m_generatePlan = new QPushButton(QStringLiteral("多通道计划…"), cmdGroup);
+    m_generatePlan->setObjectName("generatePlan");
+    m_generatePlan->setProperty("role", "primary");
+    m_openPlan = new QPushButton(QStringLiteral("打开计划"), cmdGroup);
+    m_savePlan = new QPushButton(QStringLiteral("保存计划"), cmdGroup);
+    planBar->addWidget(m_generatePlan);
+    planBar->addWidget(m_openPlan);
+    planBar->addWidget(m_savePlan);
+    planBar->addStretch();
+    cmdLayout->addLayout(planBar);
+
+    m_planSummary = new QLabel(cmdGroup);
+    m_planSummary->setWordWrap(true);
+    m_planSummary->setObjectName("testPlanSummary");
+    cmdLayout->addWidget(m_planSummary);
 
     auto *searchRow = new QHBoxLayout;
     m_searchEdit = new QLineEdit(cmdGroup);
@@ -276,6 +254,7 @@ void AutoSendPage::buildUi()
     rightLayout->setSpacing(4);
     rightLayout->addWidget(new QLabel(QStringLiteral("发送顺序"), right));
     m_playlist = new QListWidget(right);
+    m_playlist->setObjectName("testPlaylist");
     m_playlist->setSelectionMode(QAbstractItemView::SingleSelection);
     m_playlist->setDragDropMode(QAbstractItemView::InternalMove);
     m_playlist->setDefaultDropAction(Qt::MoveAction);
@@ -323,23 +302,25 @@ void AutoSendPage::buildUi()
     previewForm->addRow(QStringLiteral("正确回复"), replyRow);
     previewForm->addRow(QString(), m_matchHint);
     cmdLayout->addWidget(previewHost);
-    body->addWidget(cmdGroup);
-    body->addWidget(detailTabs);
-    body->setStretchFactor(0, 3);
-    body->setStretchFactor(1, 2);
-    body->setSizes({710, 480});
+    return cmdGroup;
+}
 
-    auto *modeGroup = new QGroupBox(QStringLiteral("测试模式"), this);
+QWidget *AutoSendPage::buildSettingsTab()
+{
+    auto *details = new QWidget;
+    auto *detailLayout = new QVBoxLayout(details);
+    detailLayout->setContentsMargins(6, 0, 6, 0);
+    detailLayout->setSpacing(10);
+
+    auto *modeGroup = new QGroupBox(QStringLiteral("测试模式"), details);
     auto *modeLayout = new QHBoxLayout(modeGroup);
     m_detectRadio = new QRadioButton(QStringLiteral("稳定性检测"), modeGroup);
-    m_detectRadio->setToolTip(QStringLiteral(
-        "一发一收：发一条→等回复或超时→再发下一条，统计丢包率/正确率。\n"
-        "实际间隔 = 设备回复耗时 + 设定间隔。"));
+    m_detectRadio->setToolTip(QStringLiteral("一发一收：发一条→等回复或超时→再发下一条，统计丢包率/正确率。\n"
+                                             "实际间隔 = 设备回复耗时 + 设定间隔。"));
     m_stressRadio = new QRadioButton(QStringLiteral("纯发送压测"), modeGroup);
-    m_stressRadio->setToolTip(QStringLiteral(
-        "按间隔连发、不等回复，只统计发送次数。用于压测最高发送速率。"));
+    m_stressRadio->setToolTip(QStringLiteral("按间隔连发、不等回复，只统计发送次数。用于压测最高发送速率。"));
     m_detectRadio->setChecked(true);
-    auto *modeGroupBtns = new QButtonGroup(this);
+    auto *modeGroupBtns = new QButtonGroup(modeGroup);
     modeGroupBtns->addButton(m_detectRadio);
     modeGroupBtns->addButton(m_stressRadio);
     modeLayout->addWidget(m_detectRadio);
@@ -347,7 +328,7 @@ void AutoSendPage::buildUi()
     modeLayout->addStretch(1);
     detailLayout->addWidget(modeGroup);
 
-    auto *paramGroup = new QGroupBox(QStringLiteral("测试参数"), this);
+    auto *paramGroup = new QGroupBox(QStringLiteral("测试参数"), details);
     auto *paramLayout = new QGridLayout(paramGroup);
     m_intervalSpin = new QSpinBox(paramGroup);
     m_intervalSpin->setRange(1, 5000);
@@ -357,15 +338,18 @@ void AutoSendPage::buildUi()
     m_stopCountRadio = new QRadioButton(QStringLiteral("按次数"), paramGroup);
     m_stopDurationRadio = new QRadioButton(QStringLiteral("按时长"), paramGroup);
     m_stopCountRadio->setChecked(true);
-    auto *stopGroup = new QButtonGroup(this);
+    auto *stopGroup = new QButtonGroup(paramGroup);
     stopGroup->addButton(m_stopCountRadio);
     stopGroup->addButton(m_stopDurationRadio);
     m_countSpin = new QSpinBox(paramGroup);
     m_countSpin->setRange(1, 10000000);
     m_countSpin->setValue(100);
     m_countSpin->setGroupSeparatorShown(true);
-    m_countSpin->setToolTip(QStringLiteral(
-        "总发送条数。清单有 3 条、次数 300，则大约每条发 100 次。"));
+    m_countSpin->setToolTip(QStringLiteral("总发送条数。清单有 3 条、次数 300，则大约每条发 100 次。"));
+    m_countUnit = new QComboBox(paramGroup);
+    m_countUnit->setObjectName("countUnit");
+    m_countUnit->addItems({QStringLiteral("总发送条数"), QStringLiteral("遍历轮数")});
+
     m_durationSpin = new QSpinBox(paramGroup);
     m_durationSpin->setRange(1, 172800);
     m_durationSpin->setValue(10);
@@ -386,7 +370,8 @@ void AutoSendPage::buildUi()
     paramLayout->addWidget(new QLabel(QStringLiteral("间隔"), paramGroup), 0, 0);
     paramLayout->addWidget(m_intervalSpin, 0, 1);
     paramLayout->addWidget(m_stopCountRadio, 1, 0);
-    paramLayout->addWidget(m_countSpin, 1, 1, 1, 2);
+    paramLayout->addWidget(m_countSpin, 1, 1);
+    paramLayout->addWidget(m_countUnit, 1, 2);
     paramLayout->addWidget(m_stopDurationRadio, 2, 0);
     paramLayout->addWidget(m_durationSpin, 2, 1);
     paramLayout->addWidget(m_durationUnit, 2, 2);
@@ -396,7 +381,7 @@ void AutoSendPage::buildUi()
     paramLayout->setColumnStretch(1, 1);
     detailLayout->addWidget(paramGroup);
 
-    auto *passGroup = new QGroupBox(QStringLiteral("合格线（仅稳定性检测）"), this);
+    auto *passGroup = new QGroupBox(QStringLiteral("合格线（仅稳定性检测）"), details);
     auto *passLayout = new QGridLayout(passGroup);
     m_passMinSuccess = new QDoubleSpinBox(passGroup);
     m_passMinSuccess->setRange(0.0, 100.0);
@@ -410,44 +395,30 @@ void AutoSendPage::buildUi()
     m_passMaxLoss->setValue(1.0);
     m_verdictLabel = new QLabel(QStringLiteral("判定：—"), passGroup);
     m_verdictLabel->setStyleSheet(QStringLiteral("font-size:16px; font-weight:bold;"));
+    m_verdictLabel->setWordWrap(true);
     passLayout->addWidget(new QLabel(QStringLiteral("总成功率 ≥"), passGroup), 0, 0);
     passLayout->addWidget(m_passMinSuccess, 0, 1);
     passLayout->addWidget(new QLabel(QStringLiteral("丢包率 ≤"), passGroup), 1, 0);
     passLayout->addWidget(m_passMaxLoss, 1, 1);
-    m_verdictLabel->setWordWrap(true);
     passLayout->addWidget(m_verdictLabel, 2, 0, 1, 2);
     detailLayout->addWidget(passGroup);
+    detailLayout->addStretch(1);
 
-    auto *ctrlLayout = new QHBoxLayout;
-    m_startButton = new QPushButton(QStringLiteral("开始测试"), this);
-    m_startButton->setProperty("role", "primary");
-    m_startButton->setMinimumWidth(132);
-    m_stopButton = new QPushButton(QStringLiteral("停止"), this);
-    m_stopButton->setProperty("role", "danger");
-    m_stopButton->setEnabled(false);
-    m_fullLogCheck = new QCheckBox(QStringLiteral("保存全量日志"), this);
-    m_fullLogCheck->setToolTip(QStringLiteral("勾选后每一轮收发都写入日志文件，体积较大，默认关闭。"));
-    m_stateLabel = new QLabel(QStringLiteral("状态：空闲"), this);
-    ctrlLayout->addWidget(m_startButton);
-    ctrlLayout->addWidget(m_stopButton);
-    ctrlLayout->addSpacing(12);
-    ctrlLayout->addWidget(m_fullLogCheck);
-    ctrlLayout->addSpacing(16);
-    ctrlLayout->addWidget(m_stateLabel);
-    ctrlLayout->addStretch(1);
-    root->addLayout(ctrlLayout);
+    auto *scroll = new QScrollArea;
+    scroll->setWidgetResizable(true);
+    scroll->setWidget(details);
+    scroll->setMinimumWidth(430);
+    return scroll;
+}
 
-    m_progress = new QProgressBar(this);
-    m_progress->setTextVisible(false);
-    m_progress->setRange(0, 100);
-    m_progress->setValue(0);
-    root->addWidget(m_progress);
+QWidget *AutoSendPage::buildLiveStatsTab()
+{
+    auto *runDetails = new QWidget;
+    auto *runLayout = new QVBoxLayout(runDetails);
+    runLayout->setContentsMargins(6, 0, 6, 0);
+    runLayout->setSpacing(10);
 
-    m_etaLabel = new QLabel(QStringLiteral("剩余 - / 预计 -"), this);
-    m_etaLabel->setStyleSheet(QStringLiteral("color:#555;"));
-    root->addWidget(m_etaLabel);
-
-    auto *statGroup = new QGroupBox(QStringLiteral("实时统计"), this);
+    auto *statGroup = new QGroupBox(QStringLiteral("实时统计"), runDetails);
     auto *grid = new QGridLayout(statGroup);
     auto makeStat = [&](const QString &name, int r, int c) {
         grid->addWidget(new QLabel(name, statGroup), r * 2, c);
@@ -462,10 +433,11 @@ void AutoSendPage::buildUi()
     m_statTimeout = makeStat(QStringLiteral("超时(丢包)"), 0, 2);
     m_statMatch = makeStat(QStringLiteral("匹配成功"), 1, 0);
     m_statMismatch = makeStat(QStringLiteral("回复错误"), 1, 1);
+    m_statPending = makeStat(QStringLiteral("在途/未完成"), 1, 2);
     m_statLoss = makeStat(QStringLiteral("丢包率"), 2, 0);
     m_statCorrect = makeStat(QStringLiteral("回复正确率"), 2, 1);
     m_statSuccess = makeStat(QStringLiteral("总成功率"), 2, 2);
-    auto *respTitle = new QLabel(QStringLiteral("响应时间"), statGroup);
+    auto *respTitle = new QLabel(QStringLiteral("首字节响应时间（仅成功轮）"), statGroup);
     respTitle->setStyleSheet(QStringLiteral("color:#555;"));
     grid->addWidget(respTitle, 6, 0, 1, 3);
     m_statRespMin = makeStat(QStringLiteral("最小"), 4, 0);
@@ -473,46 +445,71 @@ void AutoSendPage::buildUi()
     m_statRespMax = makeStat(QStringLiteral("最大"), 4, 2);
     runLayout->addWidget(statGroup);
 
-    runLayout->addWidget(new QLabel(QStringLiteral("分指令统计"), this));
-    m_slotTable = new QTableWidget(this);
+    runLayout->addWidget(new QLabel(QStringLiteral("分指令统计"), runDetails));
+    m_slotTable = new QTableWidget(runDetails);
     m_slotTable->setColumnCount(6);
-    m_slotTable->setHorizontalHeaderLabels({
-        QStringLiteral("指令"), QStringLiteral("已发送"), QStringLiteral("匹配"),
-        QStringLiteral("超时"), QStringLiteral("总成功率"), QStringLiteral("丢包率")});
+    m_slotTable->setHorizontalHeaderLabels({QStringLiteral("指令"), QStringLiteral("已发送"),
+                                            QStringLiteral("匹配"), QStringLiteral("超时"),
+                                            QStringLiteral("总成功率"), QStringLiteral("丢包率")});
     m_slotTable->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Interactive);
     m_slotTable->horizontalHeader()->setMinimumSectionSize(72);
     m_slotTable->setColumnWidth(0, 180);
     m_slotTable->setMinimumHeight(140);
     m_slotTable->setMaximumHeight(180);
     m_slotTable->setAlternatingRowColors(true);
-    for (int i = 1; i < 6; ++i) m_slotTable->setColumnWidth(i, 80);
+    for (int i = 1; i < 6; ++i) {
+        m_slotTable->setColumnWidth(i, 80);
+    }
     m_slotTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
     m_slotTable->setSelectionBehavior(QAbstractItemView::SelectRows);
     m_slotTable->verticalHeader()->setVisible(false);
     runLayout->addWidget(m_slotTable);
 
-    m_lastReplyLabel = new QLabel(QStringLiteral("最近成功回复：-"), this);
+    m_channelTable = new QTableWidget(runDetails);
+    m_channelTable->setObjectName("channelResults");
+    TestStatsTables::configureChannelTable(m_channelTable, 180);
+    runLayout->addWidget(m_channelTable);
+
+    m_lastReplyLabel = new QLabel(QStringLiteral("最近成功回复：-"), runDetails);
     m_lastReplyLabel->setTextInteractionFlags(Qt::TextSelectableByMouse);
     m_lastReplyLabel->setWordWrap(true);
     m_lastReplyLabel->setTextFormat(Qt::PlainText);
     runLayout->addWidget(m_lastReplyLabel);
     runLayout->addStretch();
-    detailLayout->addStretch(1);
+
+    auto *runScroll = new QScrollArea;
+    runScroll->setWidgetResizable(true);
+    runScroll->setWidget(runDetails);
+    return runScroll;
+}
+
+void AutoSendPage::connectSignals()
+{
+    connect(m_generatePlan, &QPushButton::clicked, this, &AutoSendPage::generateMultichannelPlan);
+    connect(m_savePlan, &QPushButton::clicked, this, &AutoSendPage::savePlan);
+    connect(m_openPlan, &QPushButton::clicked, this, &AutoSendPage::openPlan);
 
     connect(m_searchEdit, &QLineEdit::textChanged, this, &AutoSendPage::reloadCommands);
-    connect(m_libraryTree, &QTreeWidget::itemSelectionChanged, this, &AutoSendPage::onLibrarySelectionChanged);
+    connect(m_libraryTree, &QTreeWidget::itemSelectionChanged, this,
+            &AutoSendPage::onLibrarySelectionChanged);
     connect(m_libraryTree, &QTreeWidget::itemDoubleClicked, this, &AutoSendPage::onLibraryDoubleClicked);
     connect(m_playlist, &QListWidget::itemSelectionChanged, this, &AutoSendPage::onPlaylistSelectionChanged);
-    connect(m_playlist->model(), &QAbstractItemModel::rowsMoved, this, [this] {
-        refreshPlaylistLabels();
-        saveSettings();
-    });
+    connect(m_playlist->model(), &QAbstractItemModel::rowsMoved, this,
+            [this] { syncPlaylistFromDragDrop(); });
+
     connect(m_timeoutModeCombo, &QComboBox::currentIndexChanged, this, &AutoSendPage::onTimeoutModeChanged);
     connect(m_detectRadio, &QRadioButton::toggled, this, &AutoSendPage::onModeChanged);
     connect(m_stressRadio, &QRadioButton::toggled, this, &AutoSendPage::onModeChanged);
     connect(m_stopCountRadio, &QRadioButton::toggled, this, &AutoSendPage::onStopModeChanged);
     connect(m_stopDurationRadio, &QRadioButton::toggled, this, &AutoSendPage::onStopModeChanged);
     connect(m_startButton, &QPushButton::clicked, this, &AutoSendPage::startTest);
+    connect(m_pauseButton, &QPushButton::clicked, this, [this] {
+        if (m_engine->state() == AutoSendEngine::State::Paused) {
+            m_engine->resume();
+        } else {
+            m_engine->pause();
+        }
+    });
     connect(m_stopButton, &QPushButton::clicked, this, &AutoSendPage::stopTest);
     connect(m_favButton, &QPushButton::clicked, this, &AutoSendPage::toggleFavorite);
     connect(m_fillExpectedButton, &QPushButton::clicked, this, &AutoSendPage::fillExpectedFromLastRx);
@@ -521,9 +518,98 @@ void AutoSendPage::buildUi()
     connect(m_playlistDown, &QPushButton::clicked, this, [this] { movePlaylistItem(1); });
     connect(m_playlistRemove, &QPushButton::clicked, this, &AutoSendPage::removeSelectedFromPlaylist);
     connect(m_playlistClear, &QPushButton::clicked, this, &AutoSendPage::clearPlaylist);
+
+    connect(m_countUnit, &QComboBox::currentIndexChanged, this, &AutoSendPage::saveSettings);
     connect(m_fullLogCheck, &QCheckBox::toggled, this, &AutoSendPage::saveSettings);
-    connect(m_passMinSuccess, &QDoubleSpinBox::valueChanged, this, &AutoSendPage::updateVerdict);
-    connect(m_passMaxLoss, &QDoubleSpinBox::valueChanged, this, &AutoSendPage::updateVerdict);
+    connect(m_intervalSpin, &QSpinBox::valueChanged, this, &AutoSendPage::saveSettings);
+    connect(m_countSpin, &QSpinBox::valueChanged, this, &AutoSendPage::saveSettings);
+    connect(m_durationSpin, &QSpinBox::valueChanged, this, &AutoSendPage::saveSettings);
+    connect(m_durationUnit, &QComboBox::currentIndexChanged, this, [this] {
+        const QString u = m_durationUnit->currentData().toString();
+        const int v = m_durationSpin->value();
+        const QSignalBlocker blocker(m_durationSpin);
+        if (u == QStringLiteral("hour")) {
+            m_durationSpin->setRange(1, 48);
+        } else if (u == QStringLiteral("min")) {
+            m_durationSpin->setRange(1, 2880);
+        } else {
+            m_durationSpin->setRange(1, 172800);
+        }
+        m_durationSpin->setValue(qBound(m_durationSpin->minimum(), v, m_durationSpin->maximum()));
+        saveSettings();
+    });
+    connect(m_timeoutModeCombo, &QComboBox::currentIndexChanged, this, &AutoSendPage::saveSettings);
+    connect(m_timeoutSpin, &QSpinBox::valueChanged, this, &AutoSendPage::saveSettings);
+    connect(m_passMinSuccess, &QDoubleSpinBox::valueChanged, this, [this] {
+        saveSettings();
+        updateVerdict();
+    });
+    connect(m_passMaxLoss, &QDoubleSpinBox::valueChanged, this, [this] {
+        saveSettings();
+        updateVerdict();
+    });
+}
+
+void AutoSendPage::loadSettings()
+{
+    QSettings s(AppConfig::Org(), AppConfig::App());
+    m_intervalSpin->setValue(s.value(AppConfig::Key::AutoInterval, 100).toInt());
+    m_countSpin->setValue(s.value(AppConfig::Key::AutoCount, 100).toInt());
+    const bool detect = s.value(AppConfig::Key::AutoDetection, true).toBool();
+    m_detectRadio->setChecked(detect);
+    m_stressRadio->setChecked(!detect);
+    m_timeoutModeCombo->setCurrentIndex(s.value(AppConfig::Key::AutoTimeoutMode, 0).toInt() == 1 ? 1 : 0);
+    m_timeoutSpin->setValue(s.value(AppConfig::Key::AutoTimeoutMs, 200).toInt());
+    const bool byDuration = s.value(AppConfig::Key::AutoStopMode, 0).toInt() == 1;
+    m_stopDurationRadio->setChecked(byDuration);
+    m_stopCountRadio->setChecked(!byDuration);
+    applyDurationMsToUi(s.value(AppConfig::Key::AutoDurationMs, 10 * 60 * 1000).toInt());
+    m_passMinSuccess->setValue(s.value(AppConfig::Key::PassMinSuccess, 99.0).toDouble());
+    m_passMaxLoss->setValue(s.value(AppConfig::Key::PassMaxLoss, 1.0).toDouble());
+    m_fullLogCheck->setChecked(s.value(AppConfig::Key::FullLog, false).toBool());
+
+    const QString savedCmd = s.value(AppConfig::Key::AutoCommandId).toString();
+    selectTreeCommand(savedCmd);
+
+    const PlaylistStore::RestoreOutcome restored = m_store.restoreFromSettings(
+        *m_library, s, [this](const QJsonObject &cfg, QString *err) { return applyPlanSettings(cfg, err); });
+    syncPlaylistView(m_store.isEmpty() ? -1 : 0);
+    if (!m_store.isEmpty()) {
+        m_previewFromPlaylist = true;
+    }
+    if (!restored.notice.isEmpty()) {
+        m_stateLabel->setText(restored.notice);
+    }
+
+    m_loading = false;
+    updatePlanSummary();
+    saveSettings();
+}
+
+void AutoSendPage::saveSettings()
+{
+    if (m_loading) {
+        return;
+    }
+    QSettings s(AppConfig::Org(), AppConfig::App());
+    s.setValue(AppConfig::Key::AutoInterval, m_intervalSpin->value());
+    s.setValue(AppConfig::Key::AutoCount, m_countSpin->value());
+    s.setValue(AppConfig::Key::AutoDetection, detectionEnabled());
+    s.setValue(AppConfig::Key::AutoTimeoutMode,
+               m_timeoutModeCombo->currentData().toString() == QStringLiteral("manual") ? 1 : 0);
+    s.setValue(AppConfig::Key::AutoTimeoutMs, m_timeoutSpin->value());
+    s.setValue(AppConfig::Key::AutoCommandId, currentCommandId());
+    s.setValue(AppConfig::Key::AutoStopMode, m_stopDurationRadio->isChecked() ? 1 : 0);
+    s.setValue(AppConfig::Key::AutoDurationMs, durationMsFromUi());
+    s.setValue(AppConfig::Key::PassMinSuccess, m_passMinSuccess->value());
+    s.setValue(AppConfig::Key::PassMaxLoss, m_passMaxLoss->value());
+    s.setValue(AppConfig::Key::FullLog, m_fullLogCheck->isChecked());
+
+    QString notice;
+    if (!m_store.saveToSettings(s, planSettings(), &notice) && !notice.isEmpty()) {
+        m_stateLabel->setText(notice);
+    }
+    updatePlanSummary();
 }
 
 bool AutoSendPage::detectionEnabled() const
@@ -534,9 +620,9 @@ bool AutoSendPage::detectionEnabled() const
 QString AutoSendPage::currentCommandId() const
 {
     if (m_previewFromPlaylist) {
-        const QListWidgetItem *item = m_playlist->currentItem();
-        if (item) {
-            return item->data(Qt::UserRole).toString();
+        const int row = m_playlist->currentRow();
+        if (row >= 0 && row < m_store.size()) {
+            return m_store.at(row).commandId;
         }
     }
     const QStringList ids = selectedLibraryIds();
@@ -602,26 +688,9 @@ void AutoSendPage::reloadCommands()
     m_libraryTree->clear();
 
     const QString needle = m_searchEdit ? m_searchEdit->text().trimmed() : QString();
-    auto matches = [&](const CommandItem &item) {
-        if (!item.enabled) {
-            return false;
-        }
-        if (needle.isEmpty()) {
-            return true;
-        }
-        const Qt::CaseSensitivity cs = Qt::CaseInsensitive;
-        return item.commandName.contains(needle, cs)
-               || item.commandId.contains(needle, cs)
-               || item.sendData.contains(needle, cs)
-               || item.remark.contains(needle, cs)
-               || item.description.contains(needle, cs);
-    };
-
-    auto addLeaf = [&](QTreeWidgetItem *parent, const CommandItem &item) {
-        auto *leaf = new QTreeWidgetItem(parent);
+    auto populateLeaf = [](QTreeWidgetItem *leaf, const CommandItem &item) {
         leaf->setText(0, item.commandName);
         leaf->setText(1, item.sendData);
-        leaf->setData(0, kIdRole, item.commandId);
         leaf->setToolTip(0, item.commandId);
     };
 
@@ -629,7 +698,7 @@ void AutoSendPage::reloadCommands()
         QTreeWidgetItem *group = nullptr;
         for (const QString &id : ids) {
             const CommandItem *item = m_library->findById(id);
-            if (!item || !matches(*item)) {
+            if (!item || !item->enabled || !CommandTreeBuilder::matchesKeyword(*item, needle)) {
                 continue;
             }
             if (!group) {
@@ -637,61 +706,26 @@ void AutoSendPage::reloadCommands()
                 group->setText(0, title);
                 group->setFirstColumnSpanned(true);
             }
-            addLeaf(group, *item);
+            auto *leaf = new QTreeWidgetItem(group);
+            leaf->setData(0, kIdRole, item->commandId);
+            populateLeaf(leaf, *item);
         }
     };
-    addIdGroup(QStringLiteral("常用"), CommandHistory::favoriteIds());
-    addIdGroup(QStringLiteral("最近"), CommandHistory::recentIds());
+    m_cachedFavorites = CommandHistory::favoriteIds();
+    m_cachedRecents = CommandHistory::recentIds();
+    addIdGroup(QStringLiteral("常用"), m_cachedFavorites);
+    addIdGroup(QStringLiteral("最近"), m_cachedRecents);
 
-    QHash<QString, QTreeWidgetItem *> protoNodes;
-    QHash<QString, QTreeWidgetItem *> groupNodes;
-    auto ensureProto = [&](const QString &proto) -> QTreeWidgetItem * {
-        if (!protoNodes.contains(proto)) {
-            auto *node = new QTreeWidgetItem(m_libraryTree);
-            node->setText(0, CommandLibrary::protocolLabel(proto));
-            node->setFirstColumnSpanned(true);
-            protoNodes.insert(proto, node);
-        }
-        return protoNodes.value(proto);
-    };
-    auto ensureGroup = [&](const QString &proto, const QString &group) -> QTreeWidgetItem * {
-        const QString key = proto + QLatin1Char('|') + group;
-        if (!groupNodes.contains(key)) {
-            auto *node = new QTreeWidgetItem(ensureProto(proto));
-            node->setText(0, CommandLibrary::functionLabel(group));
-            node->setFirstColumnSpanned(true);
-            groupNodes.insert(key, node);
-        }
-        return groupNodes.value(key);
-    };
-    auto orderIndex = [](const QStringList &order, const QString &v) {
-        const int i = order.indexOf(v);
-        return i < 0 ? order.size() : i;
-    };
-    QList<CommandItem> sorted = m_library->items();
-    std::stable_sort(sorted.begin(), sorted.end(), [&](const CommandItem &a, const CommandItem &b) {
-        const int pa = orderIndex(kProtocolOrder, a.protocolType);
-        const int pb = orderIndex(kProtocolOrder, b.protocolType);
-        if (pa != pb) {
-            return pa < pb;
-        }
-        return orderIndex(kGroupOrder, a.functionGroup) < orderIndex(kGroupOrder, b.functionGroup);
-    });
-    for (const CommandItem &item : sorted) {
-        if (!matches(item)) {
-            continue;
-        }
-        addLeaf(ensureGroup(item.protocolType, item.functionGroup), item);
-    }
+    CommandTreeBuilder::appendGroupedCommands(m_libraryTree, m_library->items(), needle, true, kIdRole,
+                                              populateLeaf);
 
     m_libraryTree->expandAll();
-    const QString restoreId = !current.isEmpty() ? current
-        : (selected.isEmpty() ? QString() : selected.first());
+    const QString restoreId =
+        !current.isEmpty() ? current : (selected.isEmpty() ? QString() : selected.first());
     if (!restoreId.isEmpty()) {
         selectTreeCommand(restoreId);
     }
     updateFavoriteButton();
-    refreshPlaylistLabels();
 }
 
 void AutoSendPage::onLibrarySelectionChanged()
@@ -724,8 +758,8 @@ void AutoSendPage::onLibraryDoubleClicked(QTreeWidgetItem *item, int column)
 
 void AutoSendPage::onCommandChanged()
 {
-    const QString id = currentCommandId();
-    const CommandItem *item = id.isEmpty() ? nullptr : m_library->findById(id);
+    const CommandItem snapshot = currentCommand();
+    const CommandItem *item = snapshot.commandId.isEmpty() ? nullptr : &snapshot;
     updateFavoriteButton();
     if (!item) {
         m_sendPreview->setText(QStringLiteral("-"));
@@ -734,16 +768,19 @@ void AutoSendPage::onCommandChanged()
         return;
     }
     m_sendPreview->setText(QStringLiteral("%1（%2%3）")
-                               .arg(item->sendData,
-                                    item->sendFormat.toUpper(),
+                               .arg(item->sendData, item->sendFormat.toUpper(),
                                     item->enableBcc ? QStringLiteral("，自动 BCC") : QString()));
     if (item->expectedReply.isEmpty()) {
         m_replyPreview->setText(QStringLiteral("（空：收到任意字节即算成功）"));
         m_matchHint->setText(QStringLiteral("检测时：正确回复为空则收到任意回复即视为成功。"));
     } else {
-        m_replyPreview->setText(QStringLiteral("%1（%2）")
-                                    .arg(item->expectedReply, item->expectedReplyFormat.toUpper()));
-        m_matchHint->setText(QStringLiteral("检测时：回复中包含上述正确回复即算匹配（不要求整包逐字节相等）。"));
+        m_replyPreview->setText(
+            QStringLiteral("%1（%2）").arg(item->expectedReply, item->expectedReplyFormat.toUpper()));
+        m_matchHint->setText(
+            item->matchRule == QStringLiteral("strict_frame")
+                ? QStringLiteral(
+                      "检测时：收满超时窗口后整段逐字节核对；多余字节不通过。每步耗时约为超时＋间隔。")
+                : QStringLiteral("检测时：回复中包含上述正确回复即算匹配（不要求整包逐字节相等）。"));
     }
 }
 
@@ -752,10 +789,16 @@ void AutoSendPage::updateFavoriteButton()
     const QString id = currentCommandId();
     const bool fav = !id.isEmpty() && CommandHistory::isFavorite(id);
     m_favButton->setText(fav ? QStringLiteral("★ 已常用") : QStringLiteral("☆ 常用"));
+    const bool editable = !m_engine->isRunning() && !m_previewFromPlaylist;
+    m_favButton->setEnabled(editable);
+    m_fillExpectedButton->setEnabled(editable);
 }
 
 void AutoSendPage::toggleFavorite()
 {
+    if (m_previewFromPlaylist || m_engine->isRunning()) {
+        return;
+    }
     const QString id = currentCommandId();
     if (id.isEmpty()) {
         return;
@@ -767,9 +810,11 @@ void AutoSendPage::toggleFavorite()
 
 void AutoSendPage::fillExpectedFromLastRx()
 {
+    if (m_previewFromPlaylist || m_engine->isRunning()) {
+        return;
+    }
     QString err;
-    if (!CommandHistory::fillExpectedReply(m_library, currentCommandId(),
-                                           m_transport->lastRx(), &err)) {
+    if (!CommandHistory::fillExpectedReply(m_library, currentCommandId(), m_transport->lastRx(), &err)) {
         QMessageBox::warning(this, QStringLiteral("无法填入"), err);
     }
 }
@@ -780,55 +825,71 @@ void AutoSendPage::onTimeoutModeChanged()
     m_timeoutSpin->setEnabled(manual && m_startButton->isEnabled() && detectionEnabled());
 }
 
-void AutoSendPage::onModeChanged()
+void AutoSendPage::updateModeControlsEnabled()
 {
     const bool detect = detectionEnabled();
-    m_timeoutModeCombo->setEnabled(detect && m_startButton->isEnabled());
-    m_timeoutSpin->setEnabled(detect && m_startButton->isEnabled()
+    const bool unlocked = m_startButton->isEnabled();
+    m_timeoutModeCombo->setEnabled(detect && unlocked);
+    m_timeoutSpin->setEnabled(detect && unlocked
                               && m_timeoutModeCombo->currentData().toString() == QStringLiteral("manual"));
-    m_passMinSuccess->setEnabled(detect && m_startButton->isEnabled());
-    m_passMaxLoss->setEnabled(detect && m_startButton->isEnabled());
+    m_passMinSuccess->setEnabled(detect && unlocked);
+    m_passMaxLoss->setEnabled(detect && unlocked);
+}
+
+void AutoSendPage::onModeChanged()
+{
+    updateModeControlsEnabled();
     saveSettings();
     updateVerdict();
 }
 
-void AutoSendPage::onStopModeChanged()
+void AutoSendPage::updateStopModeControlsEnabled()
 {
     const bool byCount = m_stopCountRadio->isChecked();
     const bool unlocked = m_startButton->isEnabled();
     m_countSpin->setEnabled(byCount && unlocked);
+    m_countUnit->setEnabled(byCount && unlocked);
     m_durationSpin->setEnabled(!byCount && unlocked);
     m_durationUnit->setEnabled(!byCount && unlocked);
+}
+
+void AutoSendPage::onStopModeChanged()
+{
+    updateStopModeControlsEnabled();
     saveSettings();
 }
 
 void AutoSendPage::startTest()
 {
-    QList<CommandItem> items = playlistItems();
-    if (items.isEmpty()) {
+    if (m_store.isEmpty()) {
         addCurrentToPlaylist();
-        items = playlistItems();
     }
+    const QList<CommandItem> &items = m_store.items();
     if (items.isEmpty()) {
         QMessageBox::warning(this, QStringLiteral("未选择指令"),
                              QStringLiteral("请先选择一条指令并加入轮询清单。"));
         return;
     }
 
+    QString planError;
+    if (!TestPlan::validate(items, &planError)) {
+        QMessageBox::warning(this, QStringLiteral("计划无效"), planError);
+        return;
+    }
     if (detectionEnabled()) {
         QStringList emptyReply;
         for (const CommandItem &cmd : items) {
-            if (cmd.expectedReply.trimmed().isEmpty()) {
+            if (PacketBuilder::decodeCommandText(cmd.expectedReplyFormat, cmd.expectedReply).isEmpty()) {
                 emptyReply << cmd.commandName;
             }
         }
         if (!emptyReply.isEmpty()) {
-            const auto ret = QMessageBox::question(
-                this, QStringLiteral("正确回复为空"),
-                QStringLiteral("以下指令没有正确回复：\n%1\n\n"
-                               "检测时收到任意字节即算成功，统计可能偏松。是否继续？")
-                    .arg(emptyReply.join(QStringLiteral("\n"))),
-                QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
+            const auto ret =
+                QMessageBox::question(this, QStringLiteral("正确回复为空"),
+                                      QStringLiteral("以下指令没有正确回复：\n%1\n\n"
+                                                     "检测时收到任意字节即算成功，统计可能偏松。是否继续？")
+                                          .arg(emptyReply.join(QStringLiteral("\n"))),
+                                      QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
             if (ret != QMessageBox::Yes) {
                 return;
             }
@@ -848,11 +909,15 @@ void AutoSendPage::startTest()
     cfg.command.timeoutMs = timeoutMs;
     cfg.intervalMs = m_intervalSpin->value();
     cfg.totalCount = static_cast<quint64>(m_countSpin->value());
+    if (m_stopCountRadio->isChecked() && m_countUnit->currentIndex() == 1
+        && !TestPlan::totalSends(items.size(), cfg.totalCount, &cfg.totalCount, &planError)) {
+        QMessageBox::warning(this, QStringLiteral("次数无效"), planError);
+        return;
+    }
     cfg.detectionEnabled = detectionEnabled();
     cfg.fullLog = m_fullLogCheck->isChecked();
-    cfg.stopMode = m_stopDurationRadio->isChecked()
-                       ? AutoSendEngine::Config::StopMode::Duration
-                       : AutoSendEngine::Config::StopMode::Count;
+    cfg.stopMode = m_stopDurationRadio->isChecked() ? AutoSendEngine::Config::StopMode::Duration
+                                                    : AutoSendEngine::Config::StopMode::Count;
     cfg.durationMs = durationMsFromUi();
     cfg.passMinSuccessPercent = m_passMinSuccess->value();
     cfg.passMaxLossPercent = m_passMaxLoss->value();
@@ -865,13 +930,18 @@ void AutoSendPage::startTest()
         QMessageBox::warning(this, QStringLiteral("无法开始"), err);
         return;
     }
-    for (const CommandItem &cmd : items) {
-        CommandHistory::recordRecent(cmd.commandId);
+
+    QStringList recentBatch;
+    for (int i = items.size() - 1; i >= 0 && recentBatch.size() < CommandHistory::kMaxRecent; --i) {
+        const CommandItem &cmd = items.at(i);
+        if (cmd.testContext.isEmpty() && !cmd.commandId.isEmpty() && !recentBatch.contains(cmd.commandId)) {
+            recentBatch.prepend(cmd.commandId);
+        }
+    }
+    for (const QString &id : recentBatch) {
+        CommandHistory::recordRecent(id);
     }
     saveSettings();
-    m_testTimer.start();
-    m_verdictClock.invalidate();
-    m_refreshTimer->start();
 }
 
 void AutoSendPage::stopTest()
@@ -882,18 +952,29 @@ void AutoSendPage::stopTest()
 void AutoSendPage::onEngineState(AutoSendEngine::State state, const QString &text)
 {
     m_stateLabel->setText(QStringLiteral("状态：%1").arg(text));
-    const bool running = (state == AutoSendEngine::State::Running);
+    const bool running = m_engine->isRunning();
+    const bool paused = state == AutoSendEngine::State::Paused;
     setControlsLocked(running);
+    m_pauseButton->setText(paused ? QStringLiteral("继续") : QStringLiteral("暂停"));
+    m_pauseButton->setEnabled(state == AutoSendEngine::State::Running || paused);
+    m_stopButton->setEnabled(running && state != AutoSendEngine::State::Stopping);
     emit runningChanged(running);
 
-    if (!running) {
+    if (state == AutoSendEngine::State::Running) {
+        m_verdictClock.invalidate();
+        m_refreshTimer->start();
+    } else if (paused || !running) {
         m_refreshTimer->stop();
+        m_verdictClock.invalidate();
         refreshStats();
     }
 }
 
 void AutoSendPage::setControlsLocked(bool locked)
 {
+    m_generatePlan->setEnabled(!locked);
+    m_savePlan->setEnabled(!locked);
+    m_openPlan->setEnabled(!locked);
     m_searchEdit->setEnabled(!locked);
     m_libraryTree->setEnabled(!locked);
     m_favButton->setEnabled(!locked);
@@ -911,10 +992,10 @@ void AutoSendPage::setControlsLocked(bool locked)
     m_stopDurationRadio->setEnabled(!locked);
     m_fullLogCheck->setEnabled(!locked);
     m_startButton->setEnabled(!locked);
-    m_stopButton->setEnabled(locked);
-    onModeChanged();
-    onStopModeChanged();
+    updateModeControlsEnabled();
+    updateStopModeControlsEnabled();
     onTimeoutModeChanged();
+    updateFavoriteButton();
 }
 
 void AutoSendPage::updateVerdict()
@@ -923,31 +1004,22 @@ void AutoSendPage::updateVerdict()
     const bool detect = m_engine->isRunning() ? cfg.detectionEnabled : detectionEnabled();
     const double minS = m_engine->isRunning() ? cfg.passMinSuccessPercent : m_passMinSuccess->value();
     const double maxL = m_engine->isRunning() ? cfg.passMaxLossPercent : m_passMaxLoss->value();
-    QVector<TestVerdict::NamedStats> named;
-    if (m_engine->isRunning() || m_engine->state() == AutoSendEngine::State::Finished
-        || m_engine->state() == AutoSendEngine::State::Stopped) {
-        for (const AutoSendEngine::SlotStat &slot : m_engine->slotStats()) {
-            named.append({slot.commandName, slot.stats});
-        }
-    }
-    const TestVerdict::Result v = TestVerdict::evaluatePlaylist(
-        m_engine->statistics(), named, detect, minS, maxL);
-
-    QString color = QStringLiteral("#555");
-    if (v.kind == TestVerdict::Kind::Pass) {
-        color = QStringLiteral("#1a7f37");
-    } else if (v.kind == TestVerdict::Kind::Fail) {
-        color = QStringLiteral("#c62828");
-    }
-    m_verdictLabel->setStyleSheet(
-        QStringLiteral("font-size:16px; font-weight:bold; color:%1;").arg(color));
-    m_verdictLabel->setText(QStringLiteral("判定：%1  %2").arg(v.label, v.detail));
+    const TestVerdict::Result v =
+        m_engine->state() != AutoSendEngine::State::Idle
+            ? PlanAssessment::verdict(*m_engine)
+            : TestVerdict::evaluatePlaylist(m_engine->statistics(), {}, detect, minS, maxL);
+    TestStatsTables::applyVerdictLabel(m_verdictLabel, v);
 }
 
 void AutoSendPage::refreshStats()
 {
+    if (m_refreshTimer->isActive() && parentWidget() != nullptr && !isVisible()) {
+        return;
+    }
     const TestStatistics &s = m_engine->statistics();
     m_statSent->setText(QString::number(s.sendCount()));
+    m_statPending->setText(m_engine->config().detectionEnabled ? QString::number(s.unresolvedCount())
+                                                               : QStringLiteral("—"));
     m_statRecv->setText(QString::number(s.recvCount()));
     m_statMatch->setText(QString::number(s.matchCount()));
     m_statMismatch->setText(QString::number(s.mismatchCount()));
@@ -984,79 +1056,74 @@ void AutoSendPage::refreshStats()
         m_progress->setValue(qBound(0, pct, 100));
         const quint64 remaining = total > sent ? total - sent : 0;
         QString eta = QStringLiteral("-");
-        if (sent > 0 && remaining > 0 && m_testTimer.isValid()) {
-            const double perMs = static_cast<double>(m_testTimer.elapsed()) / static_cast<double>(sent);
+        if (sent > 0 && remaining > 0) {
+            const double perMs = static_cast<double>(m_engine->runElapsedMs()) / static_cast<double>(sent);
             eta = formatEta(remaining * perMs / 1000.0);
         }
         m_etaLabel->setText(QStringLiteral("剩余 %1 次 / 预计还需 %2").arg(remaining).arg(eta));
     }
 
+    if (m_engine->state() == AutoSendEngine::State::Idle) {
+        m_etaLabel->setText(QStringLiteral("待开始；发送总数见计划摘要"));
+    }
+
     const QByteArray last = m_engine->lastReply();
-    m_lastReplyLabel->setText(last.isEmpty()
-        ? QStringLiteral("最近成功回复：-")
+    QString lastReplyText = last.isEmpty() ? QStringLiteral("最近成功回复：-")
         : QStringLiteral("最近成功回复：HEX %1 | ASCII %2")
-              .arg(PacketBuilder::toHexText(last), PacketBuilder::toAsciiText(last)));
+              .arg(PacketBuilder::toHexText(last), PacketBuilder::toAsciiText(last));
+    if (m_engine->lastReplyReceivedBytes() > quint64(last.size())) {
+        lastReplyText += QStringLiteral(" [已截断：共收到 %1 字节]").arg(m_engine->lastReplyReceivedBytes());
+    }
+    if (m_lastReplyLabel->text() != lastReplyText) {
+        m_lastReplyLabel->setText(lastReplyText);
+    }
     refreshSlotTable();
+    TestStatsTables::updateChannelTable(m_channelTable, PlanAssessment::rows(*m_engine));
     highlightCurrentSlot();
 }
 
-QStringList AutoSendPage::playlistIds() const
-{
-    QStringList ids;
-    ids.reserve(m_playlist->count());
-    for (int i = 0; i < m_playlist->count(); ++i) {
-        ids << m_playlist->item(i)->data(Qt::UserRole).toString();
-    }
-    return ids;
-}
-
-QList<CommandItem> AutoSendPage::playlistItems() const
-{
-    QList<CommandItem> items;
-    for (int i = 0; i < m_playlist->count(); ++i) {
-        const QString id = m_playlist->item(i)->data(Qt::UserRole).toString();
-        const CommandItem *cmd = m_library->findById(id);
-        if (cmd) {
-            items.append(*cmd);
-        }
-    }
-    return items;
-}
-
-void AutoSendPage::restorePlaylist(const QStringList &ids)
-{
-    m_playlist->clear();
-    for (const QString &id : ids) {
-        const CommandItem *cmd = m_library->findById(id);
-        if (!cmd || !cmd->enabled) {
-            continue;
-        }
-        auto *item = new QListWidgetItem(cmd->commandName, m_playlist);
-        item->setData(Qt::UserRole, cmd->commandId);
-    }
-    refreshPlaylistLabels();
-}
-
-void AutoSendPage::refreshPlaylistLabels()
+void AutoSendPage::syncPlaylistView(int selectRow)
 {
     if (!m_playlist) {
         return;
     }
-    bool dropped = false;
-    for (int i = m_playlist->count() - 1; i >= 0; --i) {
-        const QString id = m_playlist->item(i)->data(Qt::UserRole).toString();
-        const CommandItem *cmd = m_library->findById(id);
-        if (!cmd || !cmd->enabled) {
-            delete m_playlist->takeItem(i);
-            dropped = true;
-            continue;
-        }
-        m_playlist->item(i)->setText(QStringLiteral("%1. %2").arg(i + 1).arg(cmd->commandName));
-        m_playlist->item(i)->setData(Qt::UserRole, cmd->commandId);
+    const QSignalBlocker blocker(m_playlist);
+    m_playlist->clear();
+    m_highlightedSlot = -1;
+    const QList<CommandItem> &items = m_store.items();
+    for (int i = 0; i < items.size(); ++i) {
+        const CommandItem &cmd = items.at(i);
+        auto *item =
+            new QListWidgetItem(QStringLiteral("%1. %2").arg(i + 1).arg(cmd.commandName), m_playlist);
+        item->setData(Qt::UserRole, cmd.commandId);
+        item->setData(kSnapshotRole, cmd.toJson());
+        item->setData(kStoreIndexRole, i);
+        item->setToolTip(cmd.description + QLatin1Char('\n') + cmd.sendData + QLatin1Char('\n')
+                         + cmd.expectedReply);
     }
-    if (dropped) {
-        saveSettings();
+    m_playlist->setDragDropMode(m_store.hasGeneratedSteps() ? QAbstractItemView::NoDragDrop
+                                                            : QAbstractItemView::InternalMove);
+    if (selectRow >= 0 && selectRow < m_playlist->count()) {
+        m_playlist->setCurrentRow(selectRow);
     }
+    updatePlanSummary();
+}
+
+void AutoSendPage::syncPlaylistFromDragDrop()
+{
+    if (!m_playlist || m_playlist->count() != m_store.size()) {
+        return;
+    }
+    QVector<int> order;
+    order.reserve(m_playlist->count());
+    for (int i = 0; i < m_playlist->count(); ++i) {
+        order.append(m_playlist->item(i)->data(kStoreIndexRole).toInt());
+    }
+    if (!m_store.reorderByIndices(order)) {
+        return;
+    }
+    syncPlaylistView(m_playlist->currentRow());
+    saveSettings();
 }
 
 void AutoSendPage::addCurrentToPlaylist()
@@ -1075,22 +1142,23 @@ void AutoSendPage::addCurrentToPlaylist()
 
 void AutoSendPage::appendToPlaylist(const QStringList &ids)
 {
-    QListWidgetItem *last = nullptr;
+    QList<CommandItem> added;
     for (const QString &id : ids) {
         const CommandItem *cmd = m_library->findById(id);
-        if (!cmd || !cmd->enabled) {
-            continue;
+        if (cmd && cmd->enabled) {
+            added.append(*cmd);
         }
-        auto *item = new QListWidgetItem(cmd->commandName, m_playlist);
-        item->setData(Qt::UserRole, cmd->commandId);
-        last = item;
     }
-    if (!last) {
+    if (added.isEmpty()) {
+        return;
+    }
+    QString error;
+    if (!m_store.append(added, planSettings(), &error)) {
+        QMessageBox::warning(this, QStringLiteral("计划过大"), error);
         return;
     }
     m_previewFromPlaylist = true;
-    m_playlist->setCurrentItem(last);
-    refreshPlaylistLabels();
+    syncPlaylistView(m_store.size() - 1);
     saveSettings();
     onCommandChanged();
 }
@@ -1115,65 +1183,241 @@ void AutoSendPage::selectTreeCommand(const QString &commandId)
 void AutoSendPage::removeSelectedFromPlaylist()
 {
     const int row = m_playlist->currentRow();
-    if (row < 0) {
+    if (!m_store.removeBlock(row)) {
         return;
     }
-    delete m_playlist->takeItem(row);
-    refreshPlaylistLabels();
+    const int nextRow = m_store.isEmpty() ? -1 : qMin(row, m_store.size() - 1);
+    syncPlaylistView(nextRow);
     saveSettings();
+    onCommandChanged();
 }
 
 void AutoSendPage::movePlaylistItem(int delta)
 {
     const int row = m_playlist->currentRow();
-    const int dest = row + delta;
-    if (row < 0 || dest < 0 || dest >= m_playlist->count()) {
+    int dest = -1;
+    if (!m_store.moveBlock(row, delta, &dest)) {
         return;
     }
-    QListWidgetItem *item = m_playlist->takeItem(row);
-    m_playlist->insertItem(dest, item);
-    m_playlist->setCurrentRow(dest);
-    refreshPlaylistLabels();
+    syncPlaylistView(dest);
     saveSettings();
 }
 
 void AutoSendPage::clearPlaylist()
 {
-    m_playlist->clear();
+    m_store.clear();
+    syncPlaylistView(-1);
     saveSettings();
+    onCommandChanged();
 }
 
 void AutoSendPage::refreshSlotTable()
 {
-    const QVector<AutoSendEngine::SlotStat> slotRows = m_engine->slotStats();
-    m_slotTable->setRowCount(slotRows.size());
-    for (int i = 0; i < slotRows.size(); ++i) {
-        const AutoSendEngine::SlotStat &row = slotRows.at(i);
-        const QString title = slotRows.size() > 1
-            ? QStringLiteral("%1. %2").arg(i + 1).arg(row.commandName)
-            : row.commandName;
-        m_slotTable->setItem(i, 0, new QTableWidgetItem(title));
-        m_slotTable->setItem(i, 1, new QTableWidgetItem(QString::number(row.stats.sendCount())));
-        m_slotTable->setItem(i, 2, new QTableWidgetItem(QString::number(row.stats.matchCount())));
-        m_slotTable->setItem(i, 3, new QTableWidgetItem(QString::number(row.stats.timeoutCount())));
-        m_slotTable->setItem(i, 4, new QTableWidgetItem(row.stats.successRateText()));
-        m_slotTable->setItem(i, 5, new QTableWidgetItem(row.stats.lossRateText()));
-    }
+    TestStatsTables::updateSlotTable(m_slotTable, m_engine->slotStats(), false);
 }
 
 void AutoSendPage::highlightCurrentSlot()
 {
     const bool running = m_engine->isRunning();
     const int current = running ? m_engine->currentSlotIndex() : -1;
-    for (int i = 0; i < m_playlist->count(); ++i) {
-        QListWidgetItem *item = m_playlist->item(i);
-        if (i == current) {
-            item->setBackground(QColor(0xE3, 0xF2, 0xFD));
-        } else {
-            item->setBackground(QBrush());
+    if (m_highlightedSlot != current) {
+        if (m_highlightedSlot >= 0 && m_highlightedSlot < m_playlist->count()) {
+            m_playlist->item(m_highlightedSlot)->setBackground(QBrush());
         }
+        if (current >= 0 && current < m_playlist->count()) {
+            m_playlist->item(current)->setBackground(QColor(0xE3, 0xF2, 0xFD));
+        }
+        m_highlightedSlot = current;
     }
-    if (current >= 0 && current < m_playlist->count()) {
+    if (current >= 0 && current < m_playlist->count() && m_playlist->currentRow() != current) {
+        const QSignalBlocker blocker(m_playlist);
         m_playlist->setCurrentRow(current);
     }
+}
+
+CommandItem AutoSendPage::currentCommand() const
+{
+    if (m_previewFromPlaylist) {
+        const int row = m_playlist->currentRow();
+        if (row >= 0 && row < m_store.size()) {
+            return m_store.at(row);
+        }
+    }
+    const CommandItem *item = m_library->findById(currentCommandId());
+    return item ? *item : CommandItem{};
+}
+
+void AutoSendPage::generateMultichannelPlan()
+{
+    if (m_engine->isRunning()) {
+        return;
+    }
+    MultichannelDialog dialog(this);
+    if (dialog.exec() != QDialog::Accepted) {
+        return;
+    }
+    if (m_store.size() + dialog.steps().size() > TestPlan::MaxSteps) {
+        QMessageBox::warning(this, QStringLiteral("计划过大"),
+                             QStringLiteral("计划最多4096步，请先移除部分步骤"));
+        return;
+    }
+    const int first = m_store.size();
+    QString error;
+    if (!m_store.append(dialog.steps(), planSettings(), &error)) {
+        QMessageBox::warning(this, QStringLiteral("计划过大"), error);
+        return;
+    }
+    const bool previous = m_loading;
+    m_loading = true;
+    m_stopCountRadio->setChecked(true);
+    m_countUnit->setCurrentIndex(1);
+    m_countSpin->setValue(1);
+    m_detectRadio->setChecked(true);
+    m_loading = previous;
+    updateModeControlsEnabled();
+    updateStopModeControlsEnabled();
+    m_previewFromPlaylist = true;
+    syncPlaylistView(first);
+    onCommandChanged();
+    saveSettings();
+}
+
+void AutoSendPage::updatePlanSummary()
+{
+    if (!m_planSummary || !m_countUnit || !m_playlist) {
+        return;
+    }
+    quint64 total = quint64(m_countSpin->value());
+    QString error;
+    const bool cycles = m_countUnit->currentIndex() == 1;
+    if (m_stopCountRadio->isChecked() && cycles
+        && !TestPlan::totalSends(m_store.size(), total, &total, &error)) {
+        m_planSummary->setText(error);
+        return;
+    }
+    m_planSummary->setText(
+        QStringLiteral("当前计划 %1 步；%2。设置与读回成对移动/移除，完整报文快照独立于指令库。")
+            .arg(m_store.size())
+            .arg(m_stopDurationRadio->isChecked()
+                     ? QStringLiteral("按时长停止，结束时检查覆盖情况")
+                     : QStringLiteral("%1，总发送 %2 条")
+                           .arg(cycles ? QStringLiteral("遍历%1轮").arg(m_countSpin->value())
+                                       : QStringLiteral("按条数停止"))
+                           .arg(total)));
+}
+
+QJsonObject AutoSendPage::planSettings() const
+{
+    return {{"count", m_countSpin->value()},
+            {"cycles", m_countUnit->currentIndex() == 1},
+            {"interval_ms", m_intervalSpin->value()},
+            {"detection", detectionEnabled()},
+            {"by_duration", m_stopDurationRadio->isChecked()},
+            {"duration_ms", durationMsFromUi()},
+            {"timeout_manual", m_timeoutModeCombo->currentIndex() == 1},
+            {"timeout_ms", m_timeoutSpin->value()},
+            {"min_success", m_passMinSuccess->value()},
+            {"max_loss", m_passMaxLoss->value()}};
+}
+
+bool AutoSendPage::applyPlanSettings(const QJsonObject &s, QString *error)
+{
+    auto range = [&](const char *key, double lo, double hi, bool integer) {
+        const auto v = s.value(QLatin1String(key));
+        const double n = v.toDouble(-1);
+        return v.isDouble() && n >= lo && n <= hi && (!integer || double(qint64(n)) == n);
+    };
+    if (!range("count", 1, 10000000, true) || !range("interval_ms", 1, 5000, true)
+        || !range("duration_ms", 1000, 172800000, true) || !range("timeout_ms", 10, 5000, true)
+        || !range("min_success", 0, 100, false) || !range("max_loss", 0, 100, false) || !s["cycles"].isBool()
+        || !s["detection"].isBool() || !s["by_duration"].isBool() || !s["timeout_manual"].isBool()) {
+        if (error) {
+            *error = QStringLiteral("计划的次数、间隔、时长、超时或合格线无效");
+        }
+        return false;
+    }
+    const bool previous = m_loading;
+    m_loading = true;
+    m_countSpin->setValue(s["count"].toInt());
+    m_countUnit->setCurrentIndex(s["cycles"].toBool() ? 1 : 0);
+    m_intervalSpin->setValue(s["interval_ms"].toInt());
+    m_detectRadio->setChecked(s["detection"].toBool());
+    m_stressRadio->setChecked(!s["detection"].toBool());
+    m_stopDurationRadio->setChecked(s["by_duration"].toBool());
+    m_stopCountRadio->setChecked(!s["by_duration"].toBool());
+    applyDurationMsToUi(s["duration_ms"].toInt());
+    m_timeoutModeCombo->setCurrentIndex(s["timeout_manual"].toBool() ? 1 : 0);
+    m_timeoutSpin->setValue(s["timeout_ms"].toInt());
+    m_passMinSuccess->setValue(s["min_success"].toDouble());
+    m_passMaxLoss->setValue(s["max_loss"].toDouble());
+    m_loading = previous;
+    return true;
+}
+
+void AutoSendPage::savePlan()
+{
+    TestPlan::Document plan;
+    plan.steps = m_store.items();
+    plan.settings = planSettings();
+    QString error;
+    if (!TestPlan::validate(plan.steps, &error)) {
+        QMessageBox::warning(this, QStringLiteral("无法保存"), error);
+        return;
+    }
+    const QString directory = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + "/plans";
+    QDir().mkpath(directory);
+    const QString path = QFileDialog::getSaveFileName(this, QStringLiteral("保存测试计划（含报文快照）"),
+                                                      directory + QStringLiteral("/多通道测试计划.json"),
+                                                      QStringLiteral("测试计划 (*.json)"));
+    if (path.isEmpty()) {
+        return;
+    }
+    if (!TestPlan::save(path, plan, &error)) {
+        QMessageBox::warning(this, QStringLiteral("保存失败"), error);
+    } else {
+        m_stateLabel->setText(QStringLiteral("计划已保存：%1").arg(path));
+    }
+}
+
+void AutoSendPage::openPlan()
+{
+    const QString path = QFileDialog::getOpenFileName(
+        this, QStringLiteral("打开测试计划"),
+        QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + "/plans",
+        QStringLiteral("测试计划 (*.json)"));
+    if (path.isEmpty()) {
+        return;
+    }
+    TestPlan::Document plan;
+    QString error;
+    if (!TestPlan::load(path, &plan, &error)) {
+        QMessageBox::warning(this, QStringLiteral("打开失败"), error);
+        return;
+    }
+    const auto countValue = plan.settings.value("count");
+    const double count = countValue.toDouble(-1);
+    if (!countValue.isDouble() || !(count >= 1 && count <= TestPlan::MaxSends)
+        || double(quint64(count)) != count) {
+        QMessageBox::warning(this, QStringLiteral("打开失败"), QStringLiteral("计划次数无效"));
+        return;
+    }
+    quint64 total;
+    if (!plan.settings["by_duration"].toBool() && plan.settings["cycles"].toBool()
+        && !TestPlan::totalSends(plan.steps.size(), quint64(count), &total, &error)) {
+        QMessageBox::warning(this, QStringLiteral("打开失败"), error);
+        return;
+    }
+    if (!applyPlanSettings(plan.settings, &error)) {
+        QMessageBox::warning(this, QStringLiteral("打开失败"), error);
+        return;
+    }
+    if (!m_store.replaceAll(plan.steps, plan.settings, &error)) {
+        QMessageBox::warning(this, QStringLiteral("打开失败"), error);
+        return;
+    }
+    m_previewFromPlaylist = true;
+    syncPlaylistView(m_store.isEmpty() ? -1 : 0);
+    onCommandChanged();
+    saveSettings();
+    m_stateLabel->setText(QStringLiteral("已载入计划快照：%1").arg(path));
 }

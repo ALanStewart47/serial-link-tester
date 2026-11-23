@@ -117,6 +117,7 @@ public:
     {
         Ch9121ConfigClient::Options options;
         options.localPort = 0; options.devicePort = socket.localPort();
+        options.limitedBroadcast = QHostAddress::LocalHost;
         options.readTimeoutMs = 30; options.scanTimeoutMs = 40; options.verifyTimeoutMs = 350;
         return options;
     }
@@ -238,7 +239,7 @@ private slots:
         QVERIFY(!parsePacket(packet.left(284))); QVERIFY(!parsePacket(packet + 'x'));
         auto changed = packet; changed[0] = 'x'; QVERIFY(!parsePacket(changed));
         changed = packet; changed[29] = char(203); QVERIFY(!parseGetResponse(changed));
-        changed = packet; changed[56] ^= 2; QVERIFY(!parseGetResponse(changed));
+        changed = packet; changed[17] |= 1; QVERIFY(!parseGetResponse(changed));
         changed = packet; changed[16] = char(0x81); QVERIFY(!parseGetResponse(changed));
         changed = packet; changed[74] = char(2); QVERIFY(!parseGetResponse(changed));
         QVERIFY(!parseSearchResponse(reply(0x84, 255, {})));
@@ -253,6 +254,76 @@ private slots:
         fake.zeroPc = true;
         QVERIFY(client.readConfig(DeviceMac)); QTRY_COMPARE(done.size(), 2); QCOMPARE(read.size(), 1);
         QCOMPARE(result(done), Ch9121ConfigClient::Result::Read);
+    }
+
+    void scanFindsDeviceListeningOnAdditionalDestination()
+    {
+        FakeDevice fake;
+        auto iface = loopbackInterface();
+        iface.broadcast = QHostAddress(QStringLiteral("127.0.0.2"));
+        Ch9121ConfigClient client(fake.options());
+        QVERIFY(client.setInterface(iface));
+        QSignalSpy done(&client, &Ch9121ConfigClient::finished);
+        QSignalSpy found(&client, &Ch9121ConfigClient::deviceDiscovered);
+        QVERIFY(client.startScan());
+        QTRY_COMPARE(done.size(), 1);
+        QCOMPARE(result(done), Ch9121ConfigClient::Result::Scanned);
+        QCOMPARE(found.size(), 1);
+        QCOMPARE(fake.searches, 1);
+        QCOMPARE(fake.gets, 0);
+        QCOMPARE(fake.sets, 0);
+    }
+
+    void capturedHardwareConfig()
+    {
+        // Actual 2026-09-20 GET reply: payload MAC differs from the wire identity.
+        QFile fixture(QFINDTESTDATA("data/ch9121-hardware-get.hex"));
+        QVERIFY(fixture.open(QIODevice::ReadOnly));
+        const auto packet = QByteArray::fromHex(fixture.readAll());
+        const auto config = parseGetResponse(packet);
+        QVERIFY(config);
+        QCOMPARE(config->mac, QByteArray::fromHex("5c5310216002"));
+        QCOMPARE(config->rawData.mid(26, 6), QByteArray::fromHex("020304050607"));
+        QCOMPARE(config->id, QStringLiteral("CH9121 "));
+        QCOMPARE(config->ip, QHostAddress(QStringLiteral("172.16.31.45")));
+        QCOMPARE(config->gateway, QHostAddress(QStringLiteral("172.16.31.1")));
+        QCOMPARE(config->netmask, QHostAddress(QStringLiteral("255.255.255.0")));
+        QVERIFY(config->dhcpEnabled);
+        QCOMPARE(config->uart1.baudRate, quint32(19200));
+        QCOMPARE(config->uart1.dataBits, quint8(8));
+        QCOMPARE(config->uart1.stopBits, quint8(1));
+        QCOMPARE(config->uart1.parity, UdpParity::None);
+
+        ConfigEdits edits; edits.baudRate = 115200;
+        const auto set = makeSetPacket(*config, PcMac, edits);
+        QVERIFY(!set.isEmpty());
+        QCOMPARE(set.mid(17, 6), config->mac);
+        auto expected = packet.mid(30);
+        expected.replace(151, 4, QByteArray::fromHex("00c20100"));
+        QCOMPARE(set.mid(30), expected); // Includes unchanged payload MAC and port 2.
+    }
+
+    void payloadMacDiffersFromIdentity()
+    {
+        FakeDevice fake;
+        fake.data.replace(26, 6, QByteArray::fromHex("020304050607"));
+        const auto original = fake.data;
+        Ch9121ConfigClient client(fake.options()); client.setInterface(loopbackInterface());
+        QSignalSpy done(&client, &Ch9121ConfigClient::finished), read(&client, &Ch9121ConfigClient::configRead);
+        QVERIFY(client.readConfig(DeviceMac));
+        QTRY_COMPARE(done.size(), 1);
+        QCOMPARE(result(done), Ch9121ConfigClient::Result::Read);
+        QCOMPARE(read.size(), 1);
+        const auto config = qvariant_cast<DeviceConfig>(read.last()[0]);
+        QCOMPARE(config.mac, DeviceMac);
+        ConfigEdits edits; edits.baudRate = 115200;
+        QVERIFY(client.writeConfig(config, edits));
+        QTRY_COMPARE(done.size(), 2);
+        QCOMPARE(result(done), Ch9121ConfigClient::Result::Verified);
+        QCOMPARE(fake.sets, 1);
+        auto expected = original;
+        expected.replace(151, 4, QByteArray::fromHex("00c20100"));
+        QCOMPARE(fake.data, expected);
     }
 
     void writeStaticAndLostAck_data()

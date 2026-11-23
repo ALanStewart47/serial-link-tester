@@ -29,7 +29,9 @@ public:
     int importFromFile(const QString &path, QString *errorMessage = nullptr);
 
     const QList<CommandItem> &items() const { return m_items; }
+
     const CommandItem *findById(const QString &commandId) const;
+
     QString userFilePath() const { return m_userFilePath; }
 
     // 增删改：成功后自动保存并发出 changed()。
@@ -48,7 +50,9 @@ signals:
     void changed();
 
 private:
-    bool loadFromResource(QString *errorMessage);
+    bool loadFromResource(QList<CommandItem> *items, QString *errorMessage) const;
+    bool commitItems(QList<CommandItem> items, QString *errorMessage);
+    bool saveItems(const QList<CommandItem> &items, QString *errorMessage) const;
     bool parseJsonArray(const QByteArray &json, QList<CommandItem> *out, QString *errorMessage) const;
     int indexOfId(const QString &commandId) const;
 

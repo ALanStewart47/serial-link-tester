@@ -2,6 +2,7 @@
 
 #include "core/AutoSendEngine.h"
 #include "core/CommandItem.h"
+#include "core/PlaylistStore.h"
 
 #include <QElapsedTimer>
 #include <QList>
@@ -14,19 +15,19 @@ class IByteTransport;
 class QCheckBox;
 class QComboBox;
 class QDoubleSpinBox;
+class QEvent;
 class QLabel;
 class QLineEdit;
 class QListWidget;
 class QProgressBar;
 class QPushButton;
 class QRadioButton;
+class QShowEvent;
 class QSpinBox;
 class QTableWidget;
 class QTimer;
 class QTreeWidget;
 class QTreeWidgetItem;
-class QShowEvent;
-class QEvent;
 
 class AutoSendPage : public QWidget
 {
@@ -35,6 +36,7 @@ class AutoSendPage : public QWidget
 public:
     AutoSendPage(CommandLibrary *library, AutoSendEngine *engine, IByteTransport *transport,
                  QWidget *parent = nullptr);
+    void generateMultichannelPlan();
 
 signals:
     void runningChanged(bool running);
@@ -65,7 +67,14 @@ private slots:
 
 private:
     void buildUi();
+    QWidget *buildPlaylistPanel(QWidget *parent);
+    QWidget *buildSettingsTab();
+    QWidget *buildLiveStatsTab();
+    void connectSignals();
+
     void setControlsLocked(bool locked);
+    void updateModeControlsEnabled();
+    void updateStopModeControlsEnabled();
     void loadSettings();
     void saveSettings();
     void updateFavoriteButton();
@@ -75,20 +84,36 @@ private:
     bool detectionEnabled() const;
     QString currentCommandId() const;
     QStringList selectedLibraryIds() const;
-    QStringList playlistIds() const;
-    QList<CommandItem> playlistItems() const;
-    void restorePlaylist(const QStringList &ids);
-    void refreshPlaylistLabels();
+    void syncPlaylistView(int selectRow = -1);
+    void syncPlaylistFromDragDrop();
     void refreshSlotTable();
     void highlightCurrentSlot();
     void appendToPlaylist(const QStringList &ids);
     void selectTreeCommand(const QString &commandId);
+    CommandItem currentCommand() const;
+    void savePlan();
+    void openPlan();
+    void updatePlanSummary();
+    QJsonObject planSettings() const;
+    bool applyPlanSettings(const QJsonObject &settings, QString *error);
 
     CommandLibrary *m_library = nullptr;
     AutoSendEngine *m_engine = nullptr;
     IByteTransport *m_transport = nullptr;
     QTimer *m_refreshTimer = nullptr;
+    PlaylistStore m_store;
     bool m_previewFromPlaylist = false;
+    bool m_loading = true;
+    int m_highlightedSlot = -1;
+    QStringList m_cachedFavorites;
+    QStringList m_cachedRecents;
+
+    QPushButton *m_generatePlan = nullptr;
+    QPushButton *m_savePlan = nullptr;
+    QPushButton *m_openPlan = nullptr;
+    QComboBox *m_countUnit = nullptr;
+    QLabel *m_planSummary = nullptr;
+    QTableWidget *m_channelTable = nullptr;
 
     QLineEdit *m_searchEdit = nullptr;
     QTreeWidget *m_libraryTree = nullptr;
@@ -119,14 +144,15 @@ private:
     QElapsedTimer m_verdictClock;
     QCheckBox *m_fullLogCheck = nullptr;
     QPushButton *m_startButton = nullptr;
+    QPushButton *m_pauseButton = nullptr;
     QPushButton *m_stopButton = nullptr;
 
     QLabel *m_stateLabel = nullptr;
     QProgressBar *m_progress = nullptr;
     QLabel *m_etaLabel = nullptr;
     QLabel *m_lastReplyLabel = nullptr;
-    QElapsedTimer m_testTimer;
     QLabel *m_statSent = nullptr;
+    QLabel *m_statPending = nullptr;
     QLabel *m_statRecv = nullptr;
     QLabel *m_statMatch = nullptr;
     QLabel *m_statMismatch = nullptr;

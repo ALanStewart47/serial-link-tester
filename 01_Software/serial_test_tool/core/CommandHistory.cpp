@@ -7,6 +7,8 @@
 
 #include <QSettings>
 
+#include <algorithm>
+
 namespace CommandHistory {
 
 QStringList recentIds()
@@ -55,16 +57,29 @@ bool isFavorite(const QString &commandId)
     return favoriteIds().contains(commandId);
 }
 
-QString formatReplyText(const QByteArray &rx, const QString &replyFormat)
+QString formatReplyText(const QByteArray &rx, QString &replyFormat)
 {
-    if (replyFormat == QStringLiteral("ascii")) {
-        return PacketBuilder::toAsciiText(rx);
+    const bool escaped = replyFormat == QStringLiteral("ascii_escaped");
+    const bool ascii = replyFormat == QStringLiteral("ascii") || escaped;
+    const bool printable = ascii && std::all_of(rx.cbegin(), rx.cend(), [](char byte) {
+        const auto value = static_cast<quint8>(byte);
+        return value >= 0x20 && value < 0x7f;
+    });
+    if (printable) {
+        QString text = QString::fromLatin1(rx);
+        if (escaped)
+            text.replace(QLatin1Char('\\'), QStringLiteral("\\\\"));
+        return text;
     }
+
+    replyFormat = QStringLiteral("hex");
+    if (rx.size() > (CommandItem::MaxFrameTextLength + 1) / 3)
+        return QString::fromLatin1(rx.toHex().toUpper());
     return PacketBuilder::toHexText(rx);
 }
 
-bool fillExpectedReply(CommandLibrary *library, const QString &commandId,
-                       const QByteArray &rx, QString *errorMessage)
+bool fillExpectedReply(CommandLibrary *library, const QString &commandId, const QByteArray &rx,
+                       QString *errorMessage)
 {
     if (!library) {
         if (errorMessage) {
@@ -92,7 +107,13 @@ bool fillExpectedReply(CommandLibrary *library, const QString &commandId,
         return false;
     }
     CommandItem updated = *item;
-    updated.expectedReply = formatReplyText(rx, item->expectedReplyFormat);
+    updated.expectedReply = formatReplyText(rx, updated.expectedReplyFormat);
+    if (updated.expectedReply.size() > CommandItem::MaxFrameTextLength) {
+        if (errorMessage) {
+            *errorMessage = QStringLiteral("最近接收内容超过回复长度上限，未修改正确回复。");
+        }
+        return false;
+    }
     return library->updateItem(updated, errorMessage);
 }
 
