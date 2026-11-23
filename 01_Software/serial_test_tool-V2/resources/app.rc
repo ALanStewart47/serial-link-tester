@@ -1,0 +1,32 @@
+#include <windows.h>
+
+// Keep the selected bidirectional-link icon in Explorer and the native title bar.
+IDI_APP_ICON ICON "app-icon.ico"
+
+VS_VERSION_INFO VERSIONINFO
+ FILEVERSION 0,2,6,0
+ PRODUCTVERSION 0,2,6,0
+ FILEFLAGSMASK VS_FFI_FILEFLAGSMASK
+ FILEFLAGS 0
+ FILEOS VOS_NT_WINDOWS32
+ FILETYPE VFT_APP
+ FILESUBTYPE 0
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "040904B0"
+        BEGIN
+            VALUE "CompanyName", "AlanStewart\0"
+            VALUE "FileDescription", "Serial Link Tester\0"
+            VALUE "FileVersion", "0.2.6.0\0"
+            VALUE "InternalName", "serial_test_tool\0"
+            VALUE "OriginalFilename", "serial_test_tool.exe\0"
+            VALUE "ProductName", "Serial Link Tester\0"
+            VALUE "ProductVersion", "0.2.6.0\0"
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x0409, 1200
+    END
+END

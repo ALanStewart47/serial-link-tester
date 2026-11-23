@@ -1,0 +1,32 @@
+# Qt / CMake 生成文件
+*~
+*.autosave
+*.a
+*.core
+*.moc
+*.o
+*.obj
+*.orig
+*.rej
+*.so
+*.so.*
+moc_*.cpp
+ui_*.h
+qrc_*.cpp
+*.exe
+*.dll
+*.pdb
+.moc/
+.obj/
+.pch/
+.rcc/
+.uic/
+/build*/
+
+# qtcreator
+*.pro.user*
+CMakeLists.txt.user*
+.qtcreator/
+
+# clangd 缓存
+.cache/
